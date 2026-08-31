@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Driver Duty</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --green:#1a7a3c; --green-dark:#125c2c; --green-light:#e8f7ee;
+    --red:#c0392b; --yellow:#8a6600; --bg:#f5f7f6; --text:#1c1c1c;
+    --muted:#6b7280; --border:#d9e2dc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-tap-highlight-color:transparent;}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;background:#fff;display:flex;flex-direction:column;}
+  header{background:var(--green);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+  header h1{font-size:18px;font-weight:600;}
+  header .sub{font-size:12px;opacity:.85;margin-top:2px;}
+  .logout-btn{background:rgba(255,255,255,.15);color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+  main{flex:1;padding:20px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+  .field input,.field select{width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;background:#fafafa;}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--green);background:#fff;}
+  .btn{width:100%;padding:15px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .btn-primary{background:var(--green);color:#fff;}
+  .btn-primary:active{background:var(--green-dark);}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-secondary{background:var(--green-light);color:var(--green-dark);margin-top:10px;}
+  .btn-outline{background:#fff;border:1.5px solid var(--green);color:var(--green);margin-top:10px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .hidden{display:none !important;}
+  .center-logo{text-align:center;padding:30px 0 10px;}
+  .center-logo .icon{width:64px;height:64px;background:var(--green-light);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:32px;}
+  .center-logo h2{font-size:20px;color:var(--green-dark);}
+  .center-logo p{font-size:13px;color:var(--muted);margin-top:4px;}
+  .tab-toggle{display:flex;border:1.5px solid var(--green);border-radius:10px;overflow:hidden;margin-bottom:18px;}
+  .tab-toggle button{flex:1;padding:12px;border:none;background:#fff;color:var(--green);font-weight:700;font-size:14px;cursor:pointer;}
+  .tab-toggle button.active{background:var(--green);color:#fff;}
+  #qr-reader-start,#qr-reader-end{width:100%;border-radius:12px;overflow:hidden;border:2px solid var(--green);}
+  .scan-status{text-align:center;padding:12px;color:var(--muted);font-size:14px;}
+  .manual-toggle{text-align:center;font-size:13px;color:var(--green);font-weight:600;margin-top:12px;cursor:pointer;text-decoration:underline;}
+  .vehicle-card{background:var(--green-light);border:1px solid var(--green);border-radius:14px;padding:20px;margin-bottom:16px;}
+  .vehicle-card h2{color:var(--green-dark);font-size:22px;margin-bottom:2px;}
+  .vehicle-card .code-tag{display:inline-block;background:var(--green);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px;margin-top:6px;}
+  .info-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.06);}
+  .info-row:last-child{border-bottom:none;}
+  .info-row .label{font-size:13px;color:var(--muted);}
+  .info-row .value{font-size:14px;font-weight:600;text-align:right;}
+  .error-msg{background:#fdeceb;color:var(--red);padding:12px 14px;border-radius:10px;font-size:14px;margin-bottom:14px;font-weight:600;}
+  .success-box{text-align:center;padding:10px 0 20px;}
+  .success-box .icon{width:70px;height:70px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:10px auto 16px;font-size:36px;color:var(--green);}
+  .success-box h2{color:var(--green-dark);font-size:19px;margin-bottom:16px;}
+  .section-title{font-size:14px;font-weight:700;color:var(--green-dark);margin-bottom:12px;}
+  .status-pill{display:inline-block;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:800;letter-spacing:.3px;}
+  .status-not{background:#eee;color:#555;}
+  .status-on{background:#e6f7ec;color:var(--green-dark);}
+  .status-done{background:#eef4fb;color:#1c5a99;}
+  .driver-avatar{width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Driver Duty</h1>
+      <div class="sub" id="headerSub">Field Operations</div>
+    </div>
+    <button class="logout-btn hidden" id="logoutBtn" onclick="logout()">Logout</button>
+  </header>
+
+  <main>
+
+    <!-- ================= AUTH SCREEN (Login / Create Account) ================= -->
+    <div id="authScreen">
+      <div class="center-logo">
+        <div class="icon">🚚</div>
+        <h2>Driver Duty Management</h2>
+        <p>Log in with your Driver ID or Mobile Number</p>
+      </div>
+
+      <div class="tab-toggle">
+        <button id="tabLoginBtn" class="active" onclick="switchAuthTab('login')">Log In</button>
+        <button id="tabCreateBtn" onclick="switchAuthTab('create')">Create Account</button>
+      </div>
+
+      <!-- LOGIN -->
+      <div class="card" id="loginForm">
+        <div id="loginMsg"></div>
+        <div class="field">
+          <label>Driver ID or Mobile Number</label>
+          <input type="text" id="loginIdentifier" placeholder="e.g. D-001 or 017XXXXXXXX" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" id="loginBtn" onclick="handleDriverLogin()">Log In</button>
+      </div>
+
+      <!-- CREATE ACCOUNT -->
+      <div class="card hidden" id="createForm">
+        <div id="createMsg"></div>
+        <div class="field">
+          <label>Driver Name</label>
+          <input type="text" id="createName" placeholder="e.g. Rahim Ahmed" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Driver ID</label>
+          <input type="text" id="createId" placeholder="e.g. D-001" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Driver Mobile Number</label>
+          <input type="text" id="createMobile" placeholder="e.g. 017XXXXXXXX" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" id="createBtn" onclick="handleCreateAccount()">Create Account</button>
+      </div>
+    </div>
+
+    <!-- ================= DASHBOARD ================= -->
+    <div id="dashboardScreen" class="hidden">
+      <div class="card" style="display:flex;align-items:center;gap:14px;">
+        <div class="driver-avatar" id="dashAvatar">–</div>
+        <div>
+          <div style="font-weight:800;font-size:17px;" id="dashName">-</div>
+          <div style="color:var(--muted);font-size:13px;" id="dashId">-</div>
+          <div style="color:var(--muted);font-size:13px;" id="dashMobile">-</div>
+        </div>
+      </div>
+
+      <div class="card" style="text-align:center;">
+        <div class="section-title" style="text-align:left;">Current Duty Status</div>
+        <span class="status-pill status-not" id="dutyStatusPill">Not On Duty</span>
+        <div id="dutyDetails" style="margin-top:16px;text-align:left;"></div>
+      </div>
+
+      <button class="btn btn-primary" id="dutyStartBtn" onclick="beginDutyStart()">🟢 Duty Start</button>
+      <button class="btn btn-danger" id="dutyEndBtn" style="margin-top:10px;" onclick="beginDutyEnd()">🔴 Duty End</button>
+    </div>
+
+    <!-- ================= DUTY START: SCAN / MANUAL ================= -->
+    <div id="dutyStartScanScreen" class="hidden">
+      <div class="card">
+        <div class="section-title">Scan Vehicle QR Code — Duty Start</div>
+        <div id="qr-reader-start"></div>
+        <div id="startCameraWrapStart" style="text-align:center;padding:20px 0;">
+          <button class="btn btn-primary" style="width:auto;padding:14px 28px;" onclick="startScannerFor('start')">📷 Start Camera</button>
+        </div>
+        <div class="scan-status" id="scanStatusStart"></div>
+        <div class="manual-toggle" onclick="toggleManualStart()">Enter code manually instead</div>
+        <div id="manualEntryStart" class="hidden" style="margin-top:14px;">
+          <div class="field">
+            <label>Vehicle Code</label>
+            <input type="text" id="manualCodeStart" placeholder="e.g. DF01" autocomplete="off" style="text-transform:uppercase;">
+          </div>
+          <button class="btn btn-outline" onclick="submitManualCodeStart()">Lookup Vehicle</button>
+        </div>
+        <button class="btn btn-outline" onclick="cancelToDashboard()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ================= DUTY START: VEHICLE + LOCATION ================= -->
+    <div id="dutyStartConfirmScreen" class="hidden">
+      <div class="vehicle-card">
+        <h2 id="dsVehicleName">-</h2>
+        <div class="code-tag" id="dsVehicleCode">-</div>
+      </div>
+      <div class="card">
+        <div id="dutyStartError"></div>
+        <div class="field">
+          <label>Operating Location</label>
+          <select id="locationSelect"><option value="">Loading locations...</option></select>
+        </div>
+        <button class="btn btn-primary" id="dutyStartConfirmBtn" onclick="confirmDutyStart()">Confirm Duty Start</button>
+        <button class="btn btn-outline" onclick="cancelToDashboard()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ================= DUTY END: SCAN ONLY ================= -->
+    <div id="dutyEndScanScreen" class="hidden">
+      <div class="card">
+        <div class="section-title">Scan Vehicle QR Code — Duty End</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:10px;">Manual entry is not available for Duty End — please scan the vehicle QR code.</p>
+        <div id="qr-reader-end"></div>
+        <div id="startCameraWrapEnd" style="text-align:center;padding:20px 0;">
+          <button class="btn btn-primary" style="width:auto;padding:14px 28px;" onclick="startScannerFor('end')">📷 Start Camera</button>
+        </div>
+        <div class="scan-status" id="scanStatusEnd"></div>
+        <button class="btn btn-outline" onclick="cancelToDashboard()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ================= SUCCESS SCREEN ================= -->
+    <div id="successScreen" class="hidden">
+      <div class="card success-box">
+        <div class="icon" id="successIcon">✓</div>
+        <h2 id="successTitle">Duty Started</h2>
+        <div id="successDetails"></div>
+        <button class="btn btn-primary" style="margin-top:20px;" onclick="backToDashboard()">Back to Dashboard</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ============ SUPABASE CONFIGURATION ============ */
+const SUPABASE_URL = "https://oshqaazzteqqukilghev.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zaHFhYXp6dGVxcXVraWxnaGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3Mzc4ODYsImV4cCI6MjEwMTMxMzg4Nn0.Rz33PdqBlq9yWqgNiz_4B_2fG6B3ztpk3dTx44He4F0";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============ STATE ============ */
+let currentDriver = null;      // { driver_id, name, mobile }
+let activeDuty = null;         // { id, code, vehicle_name, location, duty_start } or null
+let pendingVehicle = null;     // vehicle identified during Duty Start scan, before confirm
+let html5QrStart = null, html5QrEnd = null;
+let scanLockedStart = false, scanLockedEnd = false;
+let locationListCache = null;
+
+/* ============ INIT ============ */
+document.addEventListener("DOMContentLoaded", () => {
+  const session = getDriverSession();
+  if (session) {
+    currentDriver = session;
+    showScreen("dashboard");
+    loadDashboard();
+  } else {
+    showScreen("auth");
+  }
+});
+
+/* ============ LOCAL STORAGE (session only — no sensitive data) ============ */
+function getDriverSession() {
+  const raw = localStorage.getItem("driverSession");
+  return raw ? JSON.parse(raw) : null;
+}
+function setDriverSession(driver_id, name, mobile) {
+  localStorage.setItem("driverSession", JSON.stringify({ driver_id, name, mobile, loggedIn: true }));
+}
+function clearDriverSession() {
+  localStorage.removeItem("driverSession");
+}
+
+/* ============ SCREEN MANAGEMENT ============ */
+function showScreen(name) {
+  const screens = ["auth", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success"];
+  screens.forEach(s => {
+    const el = document.getElementById(s + "Screen");
+    if (el) el.classList.toggle("hidden", s !== name);
+  });
+  document.getElementById("logoutBtn").classList.toggle("hidden", name === "auth");
+  document.getElementById("headerSub").textContent = currentDriver ? currentDriver.name : "Field Operations";
+}
+
+function switchAuthTab(tab) {
+  document.getElementById("tabLoginBtn").classList.toggle("active", tab === "login");
+  document.getElementById("tabCreateBtn").classList.toggle("active", tab === "create");
+  document.getElementById("loginForm").classList.toggle("hidden", tab !== "login");
+  document.getElementById("createForm").classList.toggle("hidden", tab !== "create");
+}
+
+function showError(elId, text) {
+  document.getElementById(elId).innerHTML = '<div class="error-msg">' + escapeHtml(text) + '</div>';
+}
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ============ CREATE ACCOUNT ============ */
+async function handleCreateAccount() {
+  const name = document.getElementById("createName").value.trim();
+  const driverId = document.getElementById("createId").value.trim();
+  const mobile = document.getElementById("createMobile").value.trim();
+  const msgBox = "createMsg";
+  document.getElementById(msgBox).innerHTML = "";
+
+  if (!name) { showError(msgBox, "Driver Name is required."); return; }
+  if (!driverId) { showError(msgBox, "Driver ID is required."); return; }
+  if (!mobile) { showError(msgBox, "Driver Mobile Number is required."); return; }
+
+  const btn = document.getElementById("createBtn");
+  btn.disabled = true;
+  btn.textContent = "Creating...";
+
+  try {
+    const { data: existing, error: checkErr } = await sb
+      .from("driver_information")
+      .select("driver_id, driver_mobile_number")
+      .or("driver_id.eq." + driverId + ",driver_mobile_number.eq." + mobile);
+    if (checkErr) throw checkErr;
+
+    if (existing && existing.length > 0) {
+      const dupOnId = existing.some(d => d.driver_id === driverId);
+      showError(msgBox, dupOnId
+        ? "This Driver ID is already registered. Please log in instead."
+        : "This Mobile Number is already registered. Please log in instead.");
+      btn.disabled = false; btn.textContent = "Create Account";
+      return;
+    }
+
+    const { error: insertErr } = await sb
+      .from("driver_information")
+      .insert({ name, driver_id: driverId, driver_mobile_number: mobile });
+    if (insertErr) throw insertErr;
+
+    setDriverSession(driverId, name, mobile);
+    currentDriver = { driver_id: driverId, name, mobile };
+    document.getElementById("createName").value = "";
+    document.getElementById("createId").value = "";
+    document.getElementById("createMobile").value = "";
+    btn.disabled = false; btn.textContent = "Create Account";
+
+    showScreen("dashboard");
+    loadDashboard();
+  } catch (err) {
+    console.error(err);
+    showError(msgBox, "Error creating account: " + (err.message || ""));
+    btn.disabled = false; btn.textContent = "Create Account";
+  }
+}
+
+/* ============ LOGIN ============ */
+async function handleDriverLogin() {
+  const val = document.getElementById("loginIdentifier").value.trim();
+  const msgBox = "loginMsg";
+  document.getElementById(msgBox).innerHTML = "";
+
+  if (!val) { showError(msgBox, "Please enter your Driver ID or Mobile Number."); return; }
+
+  const btn = document.getElementById("loginBtn");
+  btn.disabled = true;
+  btn.textContent = "Logging in...";
+
+  try {
+    const { data, error } = await sb
+      .from("driver_information")
+      .select("name, driver_id, driver_mobile_number")
+      .or("driver_id.eq." + val + ",driver_mobile_number.eq." + val)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!data) {
+      showError(msgBox, "No driver found with that Driver ID / Mobile Number. Create an account first.");
+      btn.disabled = false; btn.textContent = "Log In";
+      return;
+    }
+
+    setDriverSession(data.driver_id, data.name, data.driver_mobile_number);
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number };
+    document.getElementById("loginIdentifier").value = "";
+    btn.disabled = false; btn.textContent = "Log In";
+
+    showScreen("dashboard");
+    loadDashboard();
+  } catch (err) {
+    console.error(err);
+    showError(msgBox, "Network error. Please try again.");
+    btn.disabled = false; btn.textContent = "Log In";
+  }
+}
+
+function logout() {
+  clearDriverSession();
+  currentDriver = null;
+  activeDuty = null;
+  stopScannerFor("start");
+  stopScannerFor("end");
+  showScreen("auth");
+}
+
+/* ============ DASHBOARD ============ */
+async function loadDashboard() {
+  document.getElementById("dashAvatar").textContent = currentDriver.name.charAt(0).toUpperCase();
+  document.getElementById("dashName").textContent = currentDriver.name;
+  document.getElementById("dashId").textContent = "ID: " + currentDriver.driver_id;
+  document.getElementById("dashMobile").textContent = currentDriver.mobile;
+
+  const pill = document.getElementById("dutyStatusPill");
+  const details = document.getElementById("dutyDetails");
+  const startBtn = document.getElementById("dutyStartBtn");
+  const endBtn = document.getElementById("dutyEndBtn");
+  details.innerHTML = '<span style="color:var(--muted);font-size:13px;">Loading...</span>';
+
+  try {
+    const { data, error } = await sb
+      .from("duty_records")
+      .select("id, code, vehicle_name, location, duty_start, duty_end")
+      .eq("driver_id", currentDriver.driver_id)
+      .order("duty_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (data && !data.duty_end) {
+      activeDuty = data;
+      pill.className = "status-pill status-on";
+      pill.textContent = "On Duty";
+      details.innerHTML =
+        '<div class="info-row"><div class="label">Vehicle</div><div class="value">' + escapeHtml(data.vehicle_name) + ' (' + escapeHtml(data.code) + ')</div></div>' +
+        '<div class="info-row"><div class="label">Location</div><div class="value">' + escapeHtml(data.location) + '</div></div>' +
+        '<div class="info-row"><div class="label">Duty Start</div><div class="value">' + new Date(data.duty_start).toLocaleString() + '</div></div>';
+      startBtn.disabled = true;
+      endBtn.disabled = false;
+    } else if (data && data.duty_end) {
+      activeDuty = null;
+      pill.className = "status-pill status-done";
+      pill.textContent = "Duty Completed";
+      details.innerHTML =
+        '<div class="info-row"><div class="label">Last Vehicle</div><div class="value">' + escapeHtml(data.vehicle_name) + ' (' + escapeHtml(data.code) + ')</div></div>' +
+        '<div class="info-row"><div class="label">Location</div><div class="value">' + escapeHtml(data.location) + '</div></div>' +
+        '<div class="info-row"><div class="label">Ended</div><div class="value">' + new Date(data.duty_end).toLocaleString() + '</div></div>';
+      startBtn.disabled = false;
+      endBtn.disabled = true;
+    } else {
+      activeDuty = null;
+      pill.className = "status-pill status-not";
+      pill.textContent = "Not On Duty";
+      details.innerHTML = '<span style="color:var(--muted);font-size:13px;">No duty records yet.</span>';
+      startBtn.disabled = false;
+      endBtn.disabled = true;
+    }
+  } catch (err) {
+    console.error(err);
+    details.innerHTML = '<span style="color:var(--red);font-size:13px;">Error loading duty status.</span>';
+  }
+}
+
+/* ============ DUTY START ============ */
+function beginDutyStart() {
+  if (activeDuty) return;
+  pendingVehicle = null;
+  document.getElementById("manualCodeStart").value = "";
+  document.getElementById("manualEntryStart").classList.add("hidden");
+  showScreen("dutyStartScan");
+}
+
+function toggleManualStart() {
+  document.getElementById("manualEntryStart").classList.toggle("hidden");
+}
+
+function submitManualCodeStart() {
+  const code = document.getElementById("manualCodeStart").value.trim();
+  if (!code) return;
+  stopScannerFor("start");
+  lookupVehicleForDutyStart(code);
+}
+
+async function lookupVehicleForDutyStart(code) {
+  const statusEl = document.getElementById("scanStatusStart");
+  statusEl.textContent = "Looking up vehicle...";
+  const upperCode = code.toUpperCase();
+
+  try {
+    const { data: vehicle, error } = await sb
+      .from("master")
+      .select("code, vehicle_name")
+      .ilike("code", upperCode)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (!vehicle) {
+      alert("Vehicle not found for code: " + code);
+      statusEl.textContent = "";
+      return;
+    }
+
+    pendingVehicle = { code: vehicle.code, vehicle_name: vehicle.vehicle_name };
+    document.getElementById("dsVehicleName").textContent = vehicle.vehicle_name;
+    document.getElementById("dsVehicleCode").textContent = vehicle.code;
+    document.getElementById("dutyStartError").innerHTML = "";
+    showScreen("dutyStartConfirm");
+    loadLocationOptions();
+  } catch (err) {
+    console.error(err);
+    alert("Network error while looking up vehicle.");
+  }
+}
+
+async function loadLocationOptions() {
+  const sel = document.getElementById("locationSelect");
+  if (locationListCache) {
+    renderLocationOptions(locationListCache);
+    return;
+  }
+  sel.innerHTML = '<option value="">Loading locations...</option>';
+  try {
+    const { data, error } = await sb.from("location").select("name").order("name");
+    if (error) throw error;
+    locationListCache = data || [];
+    renderLocationOptions(locationListCache);
+  } catch (err) {
+    console.error(err);
+    sel.innerHTML = '<option value="">Error loading locations</option>';
+  }
+}
+
+function renderLocationOptions(list) {
+  const sel = document.getElementById("locationSelect");
+  if (list.length === 0) {
+    sel.innerHTML = '<option value="">No locations configured</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">-- Select location --</option>' +
+    list.map(l => '<option value="' + escapeHtml(l.name) + '">' + escapeHtml(l.name) + '</option>').join("");
+}
+
+async function confirmDutyStart() {
+  document.getElementById("dutyStartError").innerHTML = "";
+  const location = document.getElementById("locationSelect").value;
+
+  if (!pendingVehicle) { showError("dutyStartError", "No vehicle selected."); return; }
+  if (!location) { showError("dutyStartError", "Please select an operating location."); return; }
+
+  const btn = document.getElementById("dutyStartConfirmBtn");
+  btn.disabled = true;
+  btn.textContent = "Starting Duty...";
+
+  try {
+    const { data: existingActive } = await sb
+      .from("duty_records")
+      .select("id")
+      .eq("driver_id", currentDriver.driver_id)
+      .is("duty_end", null)
+      .limit(1)
+      .maybeSingle();
+    if (existingActive) {
+      showError("dutyStartError", "You already have an active duty. Please end it first.");
+      btn.disabled = false; btn.textContent = "Confirm Duty Start";
+      return;
+    }
+
+    const { data, error } = await sb
+      .from("duty_records")
+      .insert({
+        driver_id: currentDriver.driver_id,
+        driver_name: currentDriver.name,
+        driver_mobile: currentDriver.mobile,
+        code: pendingVehicle.code,
+        vehicle_name: pendingVehicle.vehicle_name,
+        location: location
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    btn.disabled = false;
+    btn.textContent = "Confirm Duty Start";
+    activeDuty = data;
+
+    document.getElementById("successIcon").textContent = "✓";
+    document.getElementById("successTitle").textContent = "Duty Started";
+    document.getElementById("successDetails").innerHTML =
+      '<div class="info-row"><div class="label">Vehicle</div><div class="value">' + escapeHtml(data.vehicle_name) + '</div></div>' +
+      '<div class="info-row"><div class="label">Location</div><div class="value">' + escapeHtml(data.location) + '</div></div>' +
+      '<div class="info-row"><div class="label">Start Time</div><div class="value">' + new Date(data.duty_start).toLocaleString() + '</div></div>';
+    showScreen("success");
+  } catch (err) {
+    console.error(err);
+    showError("dutyStartError", "Error starting duty. Please try again.");
+    btn.disabled = false;
+    btn.textContent = "Confirm Duty Start";
+  }
+}
+
+/* ============ DUTY END ============ */
+function beginDutyEnd() {
+  if (!activeDuty) return;
+  showScreen("dutyEndScan");
+}
+
+async function lookupVehicleForDutyEnd(code) {
+  const statusEl = document.getElementById("scanStatusEnd");
+  const upperCode = code.toUpperCase();
+
+  if (!activeDuty) {
+    statusEl.textContent = "No active duty found. Please refresh and try again.";
+    return;
+  }
+
+  if (upperCode !== activeDuty.code.toUpperCase()) {
+    statusEl.textContent = "This QR code does not match your active duty vehicle (" + activeDuty.code + "). Please scan the correct vehicle.";
+    scanLockedEnd = false;
+    return;
+  }
+
+  statusEl.textContent = "Ending duty...";
+
+  try {
+    const { data, error } = await sb
+      .from("duty_records")
+      .update({ duty_end: new Date().toISOString() })
+      .eq("id", activeDuty.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    activeDuty = null;
+
+    document.getElementById("successIcon").textContent = "🏁";
+    document.getElementById("successTitle").textContent = "Duty Ended";
+    document.getElementById("successDetails").innerHTML =
+      '<div class="info-row"><div class="label">Vehicle</div><div class="value">' + escapeHtml(data.vehicle_name) + '</div></div>' +
+      '<div class="info-row"><div class="label">Location</div><div class="value">' + escapeHtml(data.location) + '</div></div>' +
+      '<div class="info-row"><div class="label">Duty Start</div><div class="value">' + new Date(data.duty_start).toLocaleString() + '</div></div>' +
+      '<div class="info-row"><div class="label">Duty End</div><div class="value">' + new Date(data.duty_end).toLocaleString() + '</div></div>';
+    showScreen("success");
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error ending duty. Please try again.";
+  }
+}
+
+/* ============ QR SCANNER (shared logic for start/end) ============ */
+async function startScannerFor(mode) {
+  const readerId = mode === "start" ? "qr-reader-start" : "qr-reader-end";
+  const statusEl = document.getElementById(mode === "start" ? "scanStatusStart" : "scanStatusEnd");
+  const startWrap = document.getElementById(mode === "start" ? "startCameraWrapStart" : "startCameraWrapEnd");
+  startWrap.style.display = "none";
+  statusEl.textContent = "Requesting camera access...";
+
+  if (mode === "start") scanLockedStart = false; else scanLockedEnd = false;
+
+  if (!window.isSecureContext) {
+    statusEl.textContent = "Camera blocked: this page must be opened over HTTPS (or localhost).";
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusEl.textContent = "Camera not supported in this browser. Use manual entry below.";
+    return;
+  }
+
+  const readerEl = document.getElementById(readerId);
+  readerEl.innerHTML = "";
+
+  let qr = mode === "start" ? html5QrStart : html5QrEnd;
+  if (!qr) {
+    qr = new Html5Qrcode(readerId);
+    if (mode === "start") html5QrStart = qr; else html5QrEnd = qr;
+  }
+
+  const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+  const onSuccess = (decodedText) => {
+    if (mode === "start") {
+      if (scanLockedStart) return;
+      scanLockedStart = true;
+      statusEl.textContent = "Code detected: " + decodedText;
+      stopScannerFor("start");
+      lookupVehicleForDutyStart(decodedText.trim());
+    } else {
+      if (scanLockedEnd) return;
+      scanLockedEnd = true;
+      statusEl.textContent = "Code detected: " + decodedText;
+      lookupVehicleForDutyEnd(decodedText.trim()).finally(() => {
+        if (!scanLockedEnd) return;
+        stopScannerFor("end");
+      });
+    }
+  };
+  const onFailure = () => {};
+
+  try {
+    await qr.start({ facingMode: "environment" }, config, onSuccess, onFailure);
+    startWrap.style.display = "none";
+    statusEl.textContent = "Point camera at the QR code";
+    return;
+  } catch (err) {
+    console.warn("facingMode start failed, trying camera list fallback:", err);
+  }
+
+  try {
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras || cameras.length === 0) {
+      statusEl.textContent = "No camera found on this device.";
+      return;
+    }
+    const backCamera = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[0];
+    await qr.start({ deviceId: { exact: backCamera.id } }, config, onSuccess, onFailure);
+    startWrap.style.display = "none";
+    statusEl.textContent = "Point camera at the QR code";
+  } catch (err) {
+    console.error("Camera start failed:", err);
+    const name = err && err.name;
+    let reason = "Camera not available.";
+    if (name === "NotAllowedError") reason = "Camera permission was denied. Please allow camera access in your browser settings.";
+    else if (name === "NotFoundError") reason = "No camera found on this device.";
+    else if (name === "NotReadableError") reason = "Camera is already in use by another app or tab.";
+    statusEl.textContent = reason;
+    startWrap.style.display = "block";
+  }
+}
+
+function stopScannerFor(mode) {
+  const qr = mode === "start" ? html5QrStart : html5QrEnd;
+  if (qr) {
+    qr.stop().then(() => qr.clear()).catch(() => {});
+  }
+}
+
+/* ============ NAVIGATION ============ */
+function cancelToDashboard() {
+  stopScannerFor("start");
+  stopScannerFor("end");
+  pendingVehicle = null;
+  showScreen("dashboard");
+}
+
+function backToDashboard() {
+  showScreen("dashboard");
+  loadDashboard();
+}
+</script>
+</body>
+</html>
