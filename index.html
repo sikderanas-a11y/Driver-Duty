@@ -250,6 +250,17 @@
       </div>
 
       <div class="card">
+        <div class="section-title">Email Address</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Add an email so you can reset your password if you forget it. We'll send a confirmation link to verify it.</p>
+        <div id="acctEmailMsg"></div>
+        <div class="field">
+          <label>Email Address</label>
+          <input type="email" id="acctEmail" placeholder="e.g. driver@example.com" autocomplete="off">
+        </div>
+        <button class="btn btn-outline" id="acctEmailBtn" onclick="handleSaveEmail()">Save Email</button>
+      </div>
+
+      <div class="card">
         <div class="section-title">Change Password</div>
         <div id="changePwMsg"></div>
         <div class="field">
@@ -305,7 +316,7 @@
         <div id="manualEntryStart" class="hidden" style="margin-top:14px;">
           <div class="field">
             <label>Vehicle Code</label>
-            <input type="text" id="manualCodeStart" placeholder="XFL0042O" autocomplete="off" style="text-transform:uppercase;">
+            <input type="text" id="manualCodeStart" placeholder="e.g. DF01" autocomplete="off" style="text-transform:uppercase;">
           </div>
           <button class="btn btn-outline" onclick="submitManualCodeStart()">Lookup Vehicle</button>
         </div>
@@ -562,7 +573,7 @@ async function restoreDriverFromSession(authUserId) {
   try {
     const { data, error } = await sb
       .from("driver_information")
-      .select("name, driver_id, driver_mobile_number, auth_user_id")
+      .select("name, driver_id, driver_mobile_number, email, auth_user_id")
       .eq("auth_user_id", authUserId)
       .maybeSingle();
     if (error) throw error;
@@ -572,7 +583,7 @@ async function restoreDriverFromSession(authUserId) {
       await openGoogleRegistration();
       return;
     }
-    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, auth_user_id: data.auth_user_id };
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email, auth_user_id: data.auth_user_id };
     showScreen("dashboard");
     loadDashboard();
   } catch (err) {
@@ -670,22 +681,29 @@ async function handleGoogleRegistrationSave() {
       // ID Number already exists — update/link that record, never create a duplicate.
       const { error: updErr } = await sb
         .from("driver_information")
-        .update({ name, driver_mobile_number: phone, auth_user_id: user.id })
+        .update({ name, driver_mobile_number: phone, email: email || null, auth_user_id: user.id })
         .eq("driver_id", driverId);
       if (updErr) throw updErr;
     } else {
       const { error: insErr } = await sb
         .from("driver_information")
-        .insert({ name, driver_id: driverId, driver_mobile_number: phone, auth_user_id: user.id });
+        .insert({ name, driver_id: driverId, driver_mobile_number: phone, email: email || null, auth_user_id: user.id });
       if (insErr) throw insErr;
     }
 
     // Set a password on this account so the driver can also log in later with
-    // Driver ID/Mobile + Password (not stored anywhere in driver_information).
+    // Driver ID/Mobile + Password. Supabase Auth is the source of truth for
+    // login; we also save a hashed backup copy on driver_information in case
+    // Supabase Auth is ever unavailable (see set_driver_password_backup RPC —
+    // it stores a bcrypt hash only, never the plaintext password).
     const { error: pwErr } = await sb.auth.updateUser({ password });
     if (pwErr) console.warn("Password not set:", pwErr.message);
+    else {
+      const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: driverId, p_password: password });
+      if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
+    }
 
-    currentDriver = { driver_id: driverId, name, mobile: phone, auth_user_id: user.id };
+    currentDriver = { driver_id: driverId, name, mobile: phone, email: email || null, auth_user_id: user.id };
     btn.disabled = false; btn.textContent = "Save & Continue";
     showScreen("dashboard");
     loadDashboard();
@@ -845,6 +863,20 @@ async function requestPasswordOtp() {
   btn.disabled = true; btn.textContent = "Sending...";
 
   try {
+    // Give a clearer error up front if this email isn't on file / confirmed
+    // for any driver, instead of a generic Supabase failure later.
+    const { data: driverRow, error: lookupErr } = await sb
+      .from("driver_information")
+      .select("driver_id")
+      .ilike("email", email)
+      .maybeSingle();
+    if (lookupErr) throw lookupErr;
+    if (!driverRow) {
+      showError(msgBox, "No driver account found with that email. Add and confirm an email under Account first.");
+      btn.disabled = false; btn.textContent = "Send Code";
+      return;
+    }
+
     const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     if (error) {
       showError(msgBox, "Could not send code: " + (error.message || "please check the email address and try again."));
@@ -895,6 +927,15 @@ async function verifyOtpAndResetPassword() {
       return;
     }
 
+    // Best-effort: keep the hashed backup copy in driver_information in sync.
+    try {
+      const { data: driverRow } = await sb.from("driver_information").select("driver_id").eq("auth_user_id", data.user.id).maybeSingle();
+      if (driverRow) {
+        const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: driverRow.driver_id, p_password: newPw });
+        if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
+      }
+    } catch (e) { console.warn("Backup password hash step failed:", e); }
+
     btn.disabled = false; btn.textContent = "Reset Password";
     forgotEmail = null;
     await restoreDriverFromSession(data.user.id);
@@ -912,6 +953,8 @@ function openAccount() {
   document.getElementById("acctName").textContent = currentDriver.name;
   document.getElementById("acctId").textContent = "ID: " + currentDriver.driver_id;
   document.getElementById("acctMobile").textContent = currentDriver.mobile;
+  document.getElementById("acctEmailMsg").innerHTML = "";
+  document.getElementById("acctEmail").value = currentDriver.email || "";
   document.getElementById("changePwMsg").innerHTML = "";
   document.getElementById("cpCurrent").value = "";
   document.getElementById("cpNew").value = "";
@@ -921,6 +964,46 @@ function openAccount() {
 
 function backToDashboardFromAccount() {
   showScreen("dashboard");
+}
+
+async function handleSaveEmail() {
+  const email = document.getElementById("acctEmail").value.trim();
+  const msgBox = "acctEmailMsg";
+  document.getElementById(msgBox).innerHTML = "";
+  if (!email) { showError(msgBox, "Please enter an email address."); return; }
+
+  const btn = document.getElementById("acctEmailBtn");
+  btn.disabled = true; btn.textContent = "Saving...";
+
+  try {
+    // Link the email to this driver's Supabase Auth identity — Supabase will
+    // send a confirmation link to it. It only becomes usable for OTP-based
+    // password reset once the driver clicks that link.
+    const { error: authErr } = await sb.auth.updateUser({ email });
+    if (authErr) {
+      showError(msgBox, "Could not save email: " + (authErr.message || "please try again."));
+      btn.disabled = false; btn.textContent = "Save Email";
+      return;
+    }
+
+    const { error: dbErr } = await sb
+      .from("driver_information")
+      .update({ email })
+      .eq("driver_id", currentDriver.driver_id);
+    if (dbErr) {
+      showError(msgBox, "Email sent for confirmation, but could not save it to your profile: " + (dbErr.message || ""));
+      btn.disabled = false; btn.textContent = "Save Email";
+      return;
+    }
+
+    currentDriver.email = email;
+    showSuccessMsg(msgBox, "Check " + email + " for a confirmation link. Once confirmed, you can use it for password reset.");
+    btn.disabled = false; btn.textContent = "Save Email";
+  } catch (err) {
+    console.error(err);
+    showError(msgBox, "Network error. Please try again.");
+    btn.disabled = false; btn.textContent = "Save Email";
+  }
 }
 
 async function handleChangePassword() {
@@ -954,6 +1037,10 @@ async function handleChangePassword() {
       btn.disabled = false; btn.textContent = "Change Password";
       return;
     }
+
+    // Best-effort: keep the hashed backup copy in driver_information in sync.
+    const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: currentDriver.driver_id, p_password: newPw });
+    if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
 
     showSuccessMsg(msgBox, "Password changed successfully.");
     document.getElementById("cpCurrent").value = "";
@@ -1405,6 +1492,24 @@ async function submitBreakdownReport() {
     const { error: rpcErr } = await sb.rpc("report_breakdown", { p_code: vehicle.code, p_vehicle_name: vehicle.vehicle_name });
     if (rpcErr) throw rpcErr;
 
+    // Location for the Report Page comes from the vehicle's current duty
+    // record (the Operating Location chosen at Duty Start) — the existing
+    // source of truth for where a vehicle is. Fall back to whatever
+    // latest_data already has on file if there's no open duty.
+    const location = await getCurrentVehicleLocation(vehicle.code);
+
+    // Save Location + Status (+ Problem/Description) onto latest_data so the
+    // Report Page has everything it needs in one place.
+    const { error: latestErr } = await sb.from("latest_data").upsert({
+      code: vehicle.code,
+      vehicle_name: vehicle.vehicle_name,
+      status: "Breakdown",
+      location,
+      problem,
+      description
+    }, { onConflict: "code" });
+    if (latestErr) console.warn("latest_data upsert failed:", latestErr.message);
+
     // Best-effort: keep the problem/description detail for the driver's own records.
     const { error: insErr } = await sb.from("breakdown_reports").insert({
       driver_id: currentDriver.driver_id,
@@ -1428,6 +1533,32 @@ async function submitBreakdownReport() {
     reportSubmitting = false;
     btn.disabled = false; btn.textContent = "Submit Report";
   }
+}
+
+// Resolves a vehicle's current Location from the existing source (the
+// Operating Location set on its open duty record). If the vehicle has no
+// open duty, keeps whatever location latest_data already has on file.
+async function getCurrentVehicleLocation(code) {
+  try {
+    const { data: duty } = await sb
+      .from("duty_records")
+      .select("location")
+      .eq("code", code)
+      .is("duty_end", null)
+      .order("duty_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (duty && duty.location) return duty.location;
+  } catch (err) {
+    console.warn("Could not resolve location from duty_records:", err.message);
+  }
+  try {
+    const { data: latest } = await sb.from("latest_data").select("location").eq("code", code).maybeSingle();
+    if (latest && latest.location) return latest.location;
+  } catch (err) {
+    console.warn("Could not resolve fallback location from latest_data:", err.message);
+  }
+  return null;
 }
 
 /* ============ DUTY TAB — WORKING HOURS (25th → 26th reporting period) ============ */
