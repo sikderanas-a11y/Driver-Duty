@@ -86,13 +86,15 @@
   .success-box .icon{width:70px;height:70px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:10px auto 16px;font-size:36px;color:var(--green);}
   .success-box h2{color:var(--green-dark);font-size:19px;margin-bottom:16px;}
   .section-title{font-size:14px;font-weight:700;color:var(--green-dark);margin-bottom:12px;}
-  /* ---- Universal vehicle-info (+) button & modal ---- */
-  .fab{position:fixed;bottom:24px;right:calc(50% - 240px + 20px);width:56px;height:56px;border-radius:50%;background:var(--brand-gradient);color:#fff;border:none;font-size:26px;box-shadow:0 4px 14px rgba(0,145,234,.45);cursor:pointer;z-index:120;}
-  @media (max-width:520px){ .fab{ right:20px; } }
-  .uv-overlay{position:fixed;inset:0;background:rgba(11,21,32,.55);z-index:200;display:flex;align-items:flex-end;justify-content:center;}
-  .uv-overlay.hidden{display:none;}
-  .uv-sheet{background:var(--overlay-sheet-bg);width:100%;max-width:480px;max-height:88vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:22px 20px;position:relative;transition:background .2s ease;}
-  .uv-close{position:absolute;top:14px;right:14px;background:var(--bg);border:none;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;color:var(--text);}
+  /* ---- Fixed bottom navigation ---- */
+  main{padding-bottom:88px;}
+  .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;align-items:flex-end;justify-content:space-around;background:var(--card-bg);border-top:1px solid var(--border);padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));z-index:150;transition:background .2s ease,border-color .2s ease;}
+  .bottom-nav.hidden{display:none;}
+  .nav-item{background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;flex:1;padding:6px 2px;cursor:pointer;color:var(--muted);font-size:11px;font-weight:600;}
+  .nav-item .nav-icon{font-size:20px;line-height:1;}
+  .nav-item.active{color:var(--accent);}
+  .nav-plus{flex:0 0 auto;margin-top:-22px;}
+  .nav-plus-circle{width:52px;height:52px;border-radius:50%;background:var(--brand-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.25);}
   .vstatus-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#fff;}
   .vstatus-running{background:var(--green);}
   .vstatus-breakdown{background:var(--red);}
@@ -108,6 +110,11 @@
   .status-on{background:#e6f7ec;color:var(--green-dark);}
   .status-done{background:#eef4fb;color:#1c5a99;}
   .driver-avatar{width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
+  .wh-chart{display:flex;align-items:flex-end;gap:10px;min-width:min-content;height:180px;padding:0 4px;}
+  .wh-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;width:34px;height:100%;flex-shrink:0;}
+  .wh-val{font-size:10px;color:var(--muted);margin-bottom:4px;white-space:nowrap;}
+  .wh-bar{width:20px;border-radius:6px 6px 0 0;background:var(--brand-gradient);min-height:3px;}
+  .wh-day{font-size:10px;color:var(--muted);margin-top:6px;}
 </style>
 </head>
 <body>
@@ -119,8 +126,6 @@
     </div>
     <div class="header-actions">
       <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Switch theme">🌙</button>
-      <button class="theme-toggle-btn hidden" id="accountBtn" onclick="openAccount()" title="Account">👤</button>
-      <button class="logout-btn hidden" id="logoutBtn" onclick="logout()">Logout</button>
     </div>
   </header>
 
@@ -285,7 +290,6 @@
 
       <button class="btn btn-primary" id="dutyStartBtn" onclick="beginDutyStart()">🟢 Duty Start</button>
       <button class="btn btn-danger" id="dutyEndBtn" style="margin-top:10px;" onclick="beginDutyEnd()">🔴 Duty End</button>
-      <button class="btn" style="margin-top:10px;background:var(--red);color:#fff;" onclick="beginBreakdownReport()">⚠️ Report Breakdown</button>
     </div>
 
     <!-- ================= DUTY START: SCAN / MANUAL ================= -->
@@ -340,41 +344,6 @@
       </div>
     </div>
 
-    <!-- ================= BREAKDOWN: SCAN / MANUAL ================= -->
-    <div id="breakdownScanScreen" class="hidden">
-      <div class="card">
-        <div class="section-title">Scan Vehicle QR Code — Report Breakdown</div>
-        <div id="qr-reader-breakdown"></div>
-        <div id="startCameraWrapBreakdown" style="text-align:center;padding:20px 0;">
-          <button class="btn btn-primary" style="width:auto;padding:14px 28px;" onclick="startScannerFor('breakdown')">📷 Start Camera</button>
-        </div>
-        <div class="scan-status" id="scanStatusBreakdown"></div>
-        <div class="manual-toggle" onclick="toggleManualBreakdown()">Enter code manually instead</div>
-        <div id="manualEntryBreakdown" class="hidden" style="margin-top:14px;">
-          <div class="field">
-            <label>Vehicle Code</label>
-            <input type="text" id="manualCodeBreakdown" placeholder="e.g. DF01" autocomplete="off" style="text-transform:uppercase;">
-          </div>
-          <button class="btn btn-outline" onclick="submitManualCodeBreakdown()">Lookup Vehicle</button>
-        </div>
-        <button class="btn btn-outline" onclick="cancelToDashboard()">Cancel</button>
-      </div>
-    </div>
-
-    <!-- ================= BREAKDOWN: CONFIRM ================= -->
-    <div id="breakdownConfirmScreen" class="hidden">
-      <div class="vehicle-card" style="background:var(--red-light);border-color:var(--red);">
-        <h2 id="bdVehicleName" style="color:#8a6600;">-</h2>
-        <div class="code-tag" style="background:var(--red);" id="bdVehicleCode">-</div>
-      </div>
-      <div class="card">
-        <div id="breakdownConfirmError"></div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Reporting this vehicle as a breakdown will immediately mark it as needing attention for mechanics and supervisors.</p>
-        <button class="btn" style="background:var(--red);color:#fff;" id="breakdownConfirmBtn" onclick="confirmBreakdown()">Confirm Breakdown</button>
-        <button class="btn btn-outline" onclick="cancelToDashboard()">Cancel</button>
-      </div>
-    </div>
-
     <!-- ================= SUCCESS SCREEN ================= -->
     <div id="successScreen" class="hidden">
       <div class="card success-box">
@@ -385,52 +354,151 @@
       </div>
     </div>
 
-  </main>
-
-  <button class="fab hidden" id="uvFabBtn" onclick="uvOpenModal()">+</button>
-</div>
-
-<div class="uv-overlay hidden" id="uvOverlay">
-  <div class="uv-sheet">
-    <button class="uv-close" onclick="uvClose()">✕</button>
-
-    <div id="uvScanScreen">
-      <div class="section-title" style="margin-top:0;">Scan or Search Vehicle</div>
-      <div id="uv-qr-reader"></div>
-      <div id="uvStartCameraWrap" style="text-align:center;padding:16px 0;">
-        <button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="uvStartScanner()">📷 Start Camera</button>
-      </div>
-      <div class="scan-status" id="uvScanStatus"></div>
-      <div class="field" style="margin-top:14px;">
-        <label>Or search by vehicle name / code</label>
-        <input type="text" id="uvSearchInput" placeholder="Start typing..." autocomplete="off" oninput="uvOnSearchInput()">
-      </div>
-      <div id="uvSearchSuggestions" class="uv-suggestion-list hidden"></div>
-    </div>
-
-    <div id="uvDetailScreen" class="hidden">
-      <div class="card" id="uvStatusCard" style="background:var(--uv-status-bg);">
-        <div style="font-size:19px;font-weight:800;" id="uvVehicleName">-</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="uvVehicleCode">-</div>
-        <div style="margin-top:8px;" id="uvStatusBadge"></div>
-        <div class="info-row"><div class="label">Location</div><div class="value" id="uvLocation">-</div></div>
+    <!-- ================= REPORT TAB — BREAKDOWN / PROBLEM REPORT ================= -->
+    <div id="reportScreen" class="hidden">
+      <div class="card">
+        <div class="section-title" style="margin-top:0;">Report Breakdown</div>
+        <div id="reportMsg"></div>
+        <div class="field">
+          <label>Vehicle</label>
+          <select id="reportVehicleSelect"><option value="">Loading vehicles...</option></select>
+        </div>
+        <div class="field">
+          <label>Problem</label>
+          <select id="reportProblemSelect">
+            <option value="">Select Problem</option>
+            <option value="Engine Problem">Engine Problem</option>
+            <option value="Tire / Puncture">Tire / Puncture</option>
+            <option value="Brake Issue">Brake Issue</option>
+            <option value="Electrical Fault">Electrical Fault</option>
+            <option value="Hydraulic Issue">Hydraulic Issue</option>
+            <option value="Fuel Issue">Fuel Issue</option>
+            <option value="Overheating">Overheating</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <textarea id="reportDescription" rows="4" placeholder="Describe the problem..." style="width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;background:var(--input-bg);color:var(--text);font-family:inherit;resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px;">
+          <div class="field" style="flex:1;margin-bottom:0;">
+            <label>Date</label>
+            <input type="text" id="reportDateDisplay" disabled style="opacity:.7;">
+          </div>
+          <div class="field" style="flex:1;margin-bottom:0;">
+            <label>Time</label>
+            <input type="text" id="reportTimeDisplay" disabled style="opacity:.7;">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="reportSubmitBtn" onclick="submitBreakdownReport()">Submit Report</button>
       </div>
       <div class="card">
-        <div class="section-title">Current Driver</div>
-        <div id="uvCurrentDriver"></div>
-        <div class="section-title">Last Driver</div>
-        <div id="uvLastDriver"></div>
+        <div class="section-title">Your Recent Reports</div>
+        <div id="myReportsList"><div class="scan-status">Loading...</div></div>
       </div>
-      <div class="card" id="uvMechanicCard">
-        <div class="section-title">Active Mechanic(s)</div>
-        <div id="uvMechanics"></div>
-      </div>
-      <button class="btn btn-outline" onclick="uvBackToScan()">Search Another Vehicle</button>
     </div>
-  </div>
+
+    <!-- ================= "+" TAB — FULL-PAGE VEHICLE INFORMATION ================= -->
+    <div id="vehicleInfoScreen" class="hidden">
+      <div id="uvScanScreen">
+        <div class="card">
+          <div class="section-title" style="margin-top:0;">Scan or Search Vehicle</div>
+          <div id="uv-qr-reader"></div>
+          <div id="uvStartCameraWrap" style="text-align:center;padding:16px 0;">
+            <button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="uvStartScanner()">📷 Start Camera</button>
+          </div>
+          <div class="scan-status" id="uvScanStatus"></div>
+          <div class="field" style="margin-top:14px;">
+            <label>Or search by vehicle name / code</label>
+            <input type="text" id="uvSearchInput" placeholder="Start typing..." autocomplete="off" oninput="uvOnSearchInput()">
+          </div>
+          <div id="uvSearchSuggestions" class="uv-suggestion-list hidden"></div>
+        </div>
+      </div>
+
+      <div id="uvDetailScreen" class="hidden">
+        <div class="card" id="uvStatusCard" style="background:var(--uv-status-bg);">
+          <div style="font-size:19px;font-weight:800;" id="uvVehicleName">-</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="uvVehicleCode">-</div>
+          <div style="margin-top:8px;" id="uvStatusBadge"></div>
+          <div class="info-row"><div class="label">Location</div><div class="value" id="uvLocation">-</div></div>
+        </div>
+        <div class="card">
+          <div class="section-title">Current Driver</div>
+          <div id="uvCurrentDriver"></div>
+          <div class="section-title">Last Driver</div>
+          <div id="uvLastDriver"></div>
+        </div>
+        <div class="card" id="uvMechanicCard">
+          <div class="section-title">Active Mechanic(s)</div>
+          <div id="uvMechanics"></div>
+        </div>
+        <button class="btn btn-outline" onclick="uvBackToScan()">Search Another Vehicle</button>
+      </div>
+    </div>
+
+    <!-- ================= DUTY TAB — WORKING HOURS ================= -->
+    <div id="workingHoursScreen" class="hidden">
+      <div class="card">
+        <div class="section-title" style="margin-top:0;">Working Hours</div>
+        <div class="field" style="margin-bottom:0;">
+          <input type="month" id="whMonthPicker" onchange="loadWorkingHours()">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:16px;">
+        <div class="card" style="flex:1;margin-bottom:0;text-align:center;">
+          <div style="font-size:12px;color:var(--muted);">Total Hours</div>
+          <div style="font-size:20px;font-weight:800;" id="whTotal">–</div>
+        </div>
+        <div class="card" style="flex:1;margin-bottom:0;text-align:center;">
+          <div style="font-size:12px;color:var(--muted);">Working Days</div>
+          <div style="font-size:20px;font-weight:800;" id="whDays">–</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:16px;">
+        <div class="card" style="flex:1;margin-bottom:0;text-align:center;">
+          <div style="font-size:12px;color:var(--muted);">Average / Day</div>
+          <div style="font-size:20px;font-weight:800;" id="whAvg">–</div>
+        </div>
+        <div class="card" style="flex:1;margin-bottom:0;text-align:center;">
+          <div style="font-size:12px;color:var(--muted);">Highest Day</div>
+          <div style="font-size:20px;font-weight:800;" id="whMax">–</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Daily Working Hours</div>
+        <div id="whPeriodLabel" style="font-size:12px;color:var(--muted);margin-bottom:12px;"></div>
+        <div id="whChartWrap" style="overflow-x:auto;"><div class="scan-status">Loading...</div></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= FIXED BOTTOM NAVIGATION ================= -->
+  <nav class="bottom-nav hidden" id="bottomNav">
+    <button class="nav-item" id="navHomeBtn" onclick="navGoHome()">
+      <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" id="navReportBtn" onclick="navGoReport()">
+      <span class="nav-icon">📋</span><span class="nav-label">Report</span>
+    </button>
+    <button class="nav-item nav-plus" id="navPlusBtn" onclick="navGoVehicleInfo()">
+      <span class="nav-plus-circle">+</span>
+    </button>
+    <button class="nav-item" id="navDutyBtn" onclick="navGoDuty()">
+      <span class="nav-icon">📊</span><span class="nav-label">Duty</span>
+    </button>
+    <button class="nav-item" id="navAccountBtn" onclick="navGoAccount()">
+      <span class="nav-icon">👤</span><span class="nav-label">Account</span>
+    </button>
+  </nav>
 </div>
 
 <script>
+
 /* ============ SUPABASE CONFIGURATION ============ */
 const SUPABASE_URL = "https://oshqaazzteqqukilghev.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zaHFhYXp6dGVxcXVraWxnaGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3Mzc4ODYsImV4cCI6MjEwMTMxMzg4Nn0.Rz33PdqBlq9yWqgNiz_4B_2fG6B3ztpk3dTx44He4F0";
@@ -657,18 +725,32 @@ async function resolveLoginPhone(identifier) {
 }
 
 /* ============ SCREEN MANAGEMENT ============ */
+const TAB_SCREENS = { dashboard: "navHomeBtn", report: "navReportBtn", vehicleInfo: "navPlusBtn", workingHours: "navDutyBtn", account: "navAccountBtn" };
+
 function showScreen(name) {
-  const screens = ["auth", "googleRegister", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "breakdownScan", "breakdownConfirm", "success"];
+  const screens = ["auth", "googleRegister", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
   screens.forEach(s => {
     const el = document.getElementById(s + "Screen");
     if (el) el.classList.toggle("hidden", s !== name);
   });
   const loggedIn = !!currentDriver;
-  document.getElementById("logoutBtn").classList.toggle("hidden", !loggedIn);
-  document.getElementById("accountBtn").classList.toggle("hidden", !loggedIn);
-  document.getElementById("uvFabBtn").classList.toggle("hidden", !loggedIn || name === "account");
+  const isTab = Object.prototype.hasOwnProperty.call(TAB_SCREENS, name);
+  document.getElementById("bottomNav").classList.toggle("hidden", !loggedIn || !isTab);
+  Object.values(TAB_SCREENS).forEach(btnId => document.getElementById(btnId).classList.remove("active"));
+  if (isTab) document.getElementById(TAB_SCREENS[name]).classList.add("active");
   document.getElementById("headerSub").textContent = currentDriver ? currentDriver.name : "Field Operations";
+
+  if (name === "report") loadReportTab();
+  if (name === "workingHours") loadWorkingHours();
+  if (name === "vehicleInfo") uvBackToScan();
 }
+
+/* ============ BOTTOM NAV ============ */
+function navGoHome() { showScreen("dashboard"); loadDashboard(); }
+function navGoReport() { showScreen("report"); }
+function navGoVehicleInfo() { showScreen("vehicleInfo"); }
+function navGoDuty() { showScreen("workingHours"); }
+function navGoAccount() { openAccount(); }
 
 function showError(elId, text) {
   document.getElementById(elId).innerHTML = '<div class="error-msg">' + escapeHtml(text) + '</div>';
@@ -1117,16 +1199,15 @@ async function lookupVehicleForDutyEnd(code) {
 
 /* ============ QR SCANNER (shared logic for start/end) ============ */
 async function startScannerFor(mode) {
-  const readerId = mode === "start" ? "qr-reader-start" : mode === "end" ? "qr-reader-end" : "qr-reader-breakdown";
-  const statusSuffix = mode === "start" ? "Start" : mode === "end" ? "End" : "Breakdown";
+  const readerId = mode === "start" ? "qr-reader-start" : "qr-reader-end";
+  const statusSuffix = mode === "start" ? "Start" : "End";
   const statusEl = document.getElementById("scanStatus" + statusSuffix);
   const startWrap = document.getElementById("startCameraWrap" + statusSuffix);
   startWrap.style.display = "none";
   statusEl.textContent = "Requesting camera access...";
 
   if (mode === "start") scanLockedStart = false;
-  else if (mode === "end") scanLockedEnd = false;
-  else scanLockedBreakdown = false;
+  else scanLockedEnd = false;
 
   if (!window.isSecureContext) {
     statusEl.textContent = "Camera blocked: this page must be opened over HTTPS (or localhost).";
@@ -1140,12 +1221,11 @@ async function startScannerFor(mode) {
   const readerEl = document.getElementById(readerId);
   readerEl.innerHTML = "";
 
-  let qr = mode === "start" ? html5QrStart : mode === "end" ? html5QrEnd : html5QrBreakdown;
+  let qr = mode === "start" ? html5QrStart : html5QrEnd;
   if (!qr) {
     qr = new Html5Qrcode(readerId);
     if (mode === "start") html5QrStart = qr;
-    else if (mode === "end") html5QrEnd = qr;
-    else html5QrBreakdown = qr;
+    else html5QrEnd = qr;
   }
 
   const config = { fps: 10, qrbox: { width: 220, height: 220 } };
@@ -1156,7 +1236,7 @@ async function startScannerFor(mode) {
       statusEl.textContent = "Code detected: " + decodedText;
       stopScannerFor("start");
       lookupVehicleForDutyStart(decodedText.trim());
-    } else if (mode === "end") {
+    } else {
       if (scanLockedEnd) return;
       scanLockedEnd = true;
       statusEl.textContent = "Code detected: " + decodedText;
@@ -1164,12 +1244,6 @@ async function startScannerFor(mode) {
         if (!scanLockedEnd) return;
         stopScannerFor("end");
       });
-    } else {
-      if (scanLockedBreakdown) return;
-      scanLockedBreakdown = true;
-      statusEl.textContent = "Code detected: " + decodedText;
-      stopScannerFor("breakdown");
-      lookupVehicleForBreakdown(decodedText.trim());
     }
   };
   const onFailure = () => {};
@@ -1206,107 +1280,9 @@ async function startScannerFor(mode) {
 }
 
 function stopScannerFor(mode) {
-  const qr = mode === "start" ? html5QrStart : mode === "end" ? html5QrEnd : html5QrBreakdown;
+  const qr = mode === "start" ? html5QrStart : html5QrEnd;
   if (qr) {
     qr.stop().then(() => qr.clear()).catch(() => {});
-  }
-}
-
-/* ============ BREAKDOWN REPORTING ============ */
-let pendingBreakdownVehicle = null;
-
-function beginBreakdownReport() {
-  pendingBreakdownVehicle = null;
-  document.getElementById("manualCodeBreakdown").value = "";
-  document.getElementById("manualEntryBreakdown").classList.add("hidden");
-  document.getElementById("scanStatusBreakdown").textContent = "";
-  showScreen("breakdownScan");
-}
-
-function toggleManualBreakdown() {
-  document.getElementById("manualEntryBreakdown").classList.toggle("hidden");
-}
-
-function submitManualCodeBreakdown() {
-  const code = document.getElementById("manualCodeBreakdown").value.trim();
-  if (!code) return;
-  stopScannerFor("breakdown");
-  lookupVehicleForBreakdown(code);
-}
-
-async function lookupVehicleForBreakdown(code) {
-  const statusEl = document.getElementById("scanStatusBreakdown");
-  statusEl.textContent = "Looking up vehicle...";
-  const upperCode = code.toUpperCase();
-
-  try {
-    const { data: vehicle, error } = await sb
-      .from("master")
-      .select("code, vehicle_name")
-      .ilike("code", upperCode)
-      .maybeSingle();
-    if (error) throw error;
-
-    if (!vehicle) {
-      alert("Vehicle not found for code: " + code);
-      statusEl.textContent = "";
-      return;
-    }
-
-    pendingBreakdownVehicle = { code: vehicle.code, vehicle_name: vehicle.vehicle_name };
-    document.getElementById("bdVehicleName").textContent = vehicle.vehicle_name;
-    document.getElementById("bdVehicleCode").textContent = vehicle.code;
-    document.getElementById("breakdownConfirmError").innerHTML = "";
-    showScreen("breakdownConfirm");
-  } catch (err) {
-    console.error(err);
-    alert("Network error while looking up vehicle.");
-  }
-}
-
-async function confirmBreakdown() {
-  const errorBox = document.getElementById("breakdownConfirmError");
-  errorBox.innerHTML = "";
-  if (!pendingBreakdownVehicle) { showError("breakdownConfirmError", "No vehicle selected."); return; }
-
-  const btn = document.getElementById("breakdownConfirmBtn");
-  btn.disabled = true;
-  btn.textContent = "Reporting...";
-
-  try {
-    // Atomic RPC: if a mechanic is currently actively working on this
-    // vehicle, this intentionally does NOT overwrite "Work in
-    // Progress" (rule 9.7) — it tells us that happened via `applied`.
-    const { data: result, error } = await sb.rpc("report_breakdown", {
-      p_code: pendingBreakdownVehicle.code,
-      p_vehicle_name: pendingBreakdownVehicle.vehicle_name
-    });
-    if (error) throw error;
-
-    btn.disabled = false;
-    btn.textContent = "Confirm Breakdown";
-
-    if (!result.applied) {
-      document.getElementById("successIcon").textContent = "🛠️";
-      document.getElementById("successTitle").textContent = "Vehicle Is Under Repair";
-      document.getElementById("successDetails").innerHTML =
-        '<div class="info-row"><div class="label">Vehicle</div><div class="value">' + escapeHtml(pendingBreakdownVehicle.vehicle_name) + '</div></div>' +
-        '<div class="info-row"><div class="label">Current Status</div><div class="value">Work in Progress</div></div>' +
-        '<p style="font-size:13px;color:var(--muted);margin-top:10px;">A mechanic is already actively working on this vehicle, so its status stays "Work in Progress" and was not changed.</p>';
-    } else {
-      document.getElementById("successIcon").textContent = "⚠️";
-      document.getElementById("successTitle").textContent = "Breakdown Reported";
-      document.getElementById("successDetails").innerHTML =
-        '<div class="info-row"><div class="label">Vehicle</div><div class="value">' + escapeHtml(pendingBreakdownVehicle.vehicle_name) + '</div></div>' +
-        '<div class="info-row"><div class="label">Status</div><div class="value">Breakdown</div></div>' +
-        '<div class="info-row"><div class="label">Reported</div><div class="value">' + new Date().toLocaleString() + '</div></div>';
-    }
-    showScreen("success");
-  } catch (err) {
-    console.error(err);
-    showError("breakdownConfirmError", "Error reporting breakdown. Please try again.");
-    btn.disabled = false;
-    btn.textContent = "Confirm Breakdown";
   }
 }
 
@@ -1314,10 +1290,9 @@ async function confirmBreakdown() {
 function cancelToDashboard() {
   stopScannerFor("start");
   stopScannerFor("end");
-  stopScannerFor("breakdown");
   pendingVehicle = null;
-  pendingBreakdownVehicle = null;
   showScreen("dashboard");
+  loadDashboard();
 }
 
 function backToDashboard() {
@@ -1325,7 +1300,203 @@ function backToDashboard() {
   loadDashboard();
 }
 
-/* ============ UNIVERSAL VEHICLE INFO (+ button) ============ */
+/* ============ REPORT TAB — BREAKDOWN / PROBLEM REPORTING ============ */
+let reportVehicleCache = null;
+
+async function loadReportTab() {
+  const dateEl = document.getElementById("reportDateDisplay");
+  const timeEl = document.getElementById("reportTimeDisplay");
+  const now = new Date();
+  dateEl.value = now.toLocaleDateString();
+  timeEl.value = now.toLocaleTimeString();
+  document.getElementById("reportMsg").innerHTML = "";
+
+  const select = document.getElementById("reportVehicleSelect");
+  if (!reportVehicleCache) {
+    select.innerHTML = '<option value="">Loading vehicles...</option>';
+    try {
+      const { data, error } = await sb.from("master").select("code, vehicle_name").order("vehicle_name");
+      if (error) throw error;
+      reportVehicleCache = data || [];
+    } catch (err) {
+      console.error(err);
+      select.innerHTML = '<option value="">Could not load vehicles</option>';
+      reportVehicleCache = [];
+    }
+  }
+  select.innerHTML = '<option value="">Select Vehicle</option>' +
+    reportVehicleCache.map(v => '<option value="' + escapeHtml(v.code) + '">' + escapeHtml(v.vehicle_name) + ' (' + escapeHtml(v.code) + ')</option>').join("");
+
+  loadMyReports();
+}
+
+async function loadMyReports() {
+  const el = document.getElementById("myReportsList");
+  if (!currentDriver) return;
+  el.innerHTML = '<div class="scan-status">Loading...</div>';
+  try {
+    const { data, error } = await sb
+      .from("breakdown_reports")
+      .select("vehicle_name, problem, reported_at")
+      .eq("driver_id", currentDriver.driver_id)
+      .order("reported_at", { ascending: false })
+      .limit(5);
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:8px 0;color:var(--muted);font-size:13px;">No Reports Yet<br><span style="font-size:12px;">Your submitted breakdown reports will appear here.</span></div>';
+      return;
+    }
+    el.innerHTML = data.map(r => uvInfoRows([
+      ["Vehicle", r.vehicle_name],
+      ["Problem", r.problem],
+      ["Reported", new Date(r.reported_at).toLocaleString()]
+    ])).join('<div style="height:10px;"></div>');
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = '<div class="empty-state" style="padding:8px 0;color:var(--muted);font-size:13px;">Could not load your reports.</div>';
+  }
+}
+
+let reportSubmitting = false;
+
+async function submitBreakdownReport() {
+  if (reportSubmitting) return;
+  const msgBox = "reportMsg";
+  document.getElementById(msgBox).innerHTML = "";
+
+  const code = document.getElementById("reportVehicleSelect").value;
+  const vehicleName = code ? (document.getElementById("reportVehicleSelect").selectedOptions[0].textContent) : "";
+  const problem = document.getElementById("reportProblemSelect").value;
+  const description = document.getElementById("reportDescription").value.trim();
+
+  if (!code) { showError(msgBox, "Please select a vehicle."); return; }
+  if (!problem) { showError(msgBox, "Please select a problem."); return; }
+
+  reportSubmitting = true;
+  const btn = document.getElementById("reportSubmitBtn");
+  btn.disabled = true; btn.textContent = "Submitting...";
+
+  try {
+    const { data: vehicle, error: vErr } = await sb.from("master").select("code, vehicle_name").eq("code", code).maybeSingle();
+    if (vErr) throw vErr;
+    if (!vehicle) { showError(msgBox, "Vehicle could not be verified. Please try again."); reportSubmitting = false; btn.disabled = false; btn.textContent = "Submit Report"; return; }
+
+    // Atomic status RPC (same one used elsewhere): flips the vehicle to
+    // "Breakdown" unless a mechanic already has it as "Work in Progress".
+    const { error: rpcErr } = await sb.rpc("report_breakdown", { p_code: vehicle.code, p_vehicle_name: vehicle.vehicle_name });
+    if (rpcErr) throw rpcErr;
+
+    // Best-effort: keep the problem/description detail for the driver's own records.
+    const { error: insErr } = await sb.from("breakdown_reports").insert({
+      driver_id: currentDriver.driver_id,
+      code: vehicle.code,
+      vehicle_name: vehicle.vehicle_name,
+      problem,
+      description,
+      reported_at: new Date().toISOString()
+    });
+    if (insErr) console.warn("breakdown_reports insert failed:", insErr.message);
+
+    showSuccessMsg(msgBox, "Report submitted successfully.");
+    document.getElementById("reportVehicleSelect").value = "";
+    document.getElementById("reportProblemSelect").value = "";
+    document.getElementById("reportDescription").value = "";
+    loadMyReports();
+  } catch (err) {
+    console.error(err);
+    showError(msgBox, "Report could not be submitted. Please try again.");
+  } finally {
+    reportSubmitting = false;
+    btn.disabled = false; btn.textContent = "Submit Report";
+  }
+}
+
+/* ============ DUTY TAB — WORKING HOURS (25th → 26th reporting period) ============ */
+function computeReportingPeriod(monthStr) {
+  // monthStr is "YYYY-MM" from <input type="month">. Selected month's window is
+  // always 25th of the previous month through 26th of the selected month —
+  // computed dynamically so it rolls correctly across year boundaries too.
+  const [year, month] = monthStr.split("-").map(Number); // month is 1-indexed
+  const start = new Date(year, month - 2, 25, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, 26, 23, 59, 59, 999);
+  return { start, end };
+}
+
+function fmtHoursMinutes(totalHours) {
+  const h = Math.floor(totalHours);
+  const m = Math.round((totalHours - h) * 60);
+  return h + "h " + (m < 10 ? "0" : "") + m + "m";
+}
+
+async function loadWorkingHours() {
+  if (!currentDriver) return;
+  const picker = document.getElementById("whMonthPicker");
+  if (!picker.value) {
+    const now = new Date();
+    picker.value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  }
+  const { start, end } = computeReportingPeriod(picker.value);
+  document.getElementById("whPeriodLabel").textContent =
+    start.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + " – " +
+    end.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  const chartWrap = document.getElementById("whChartWrap");
+  chartWrap.innerHTML = '<div class="scan-status">Loading...</div>';
+
+  try {
+    const { data, error } = await sb
+      .from("duty_records")
+      .select("duty_start, duty_end")
+      .eq("driver_id", currentDriver.driver_id)
+      .gte("duty_start", start.toISOString())
+      .lte("duty_start", end.toISOString())
+      .order("duty_start", { ascending: true });
+    if (error) throw error;
+
+    // Sum hours per calendar day (local time), from actual duty_start/duty_end
+    // records only — sessions without an end time yet aren't counted.
+    const byDay = {};
+    (data || []).forEach(rec => {
+      if (!rec.duty_end) return;
+      const s = new Date(rec.duty_start);
+      const e = new Date(rec.duty_end);
+      const hours = (e - s) / 3600000;
+      if (hours <= 0) return;
+      const dayKey = s.getFullYear() + "-" + String(s.getMonth() + 1).padStart(2, "0") + "-" + String(s.getDate()).padStart(2, "0");
+      byDay[dayKey] = (byDay[dayKey] || 0) + hours;
+    });
+
+    const days = Object.keys(byDay).sort();
+    if (days.length === 0) {
+      chartWrap.innerHTML = '<div class="empty-state" style="padding:16px 0;color:var(--muted);font-size:13px;text-align:center;">No Duty Records<br><span style="font-size:12px;">There are no working-hour records for the selected period.</span></div>';
+      document.getElementById("whTotal").textContent = "0h 00m";
+      document.getElementById("whDays").textContent = "0";
+      document.getElementById("whAvg").textContent = "0h 00m";
+      document.getElementById("whMax").textContent = "0h 00m";
+      return;
+    }
+
+    const totalHours = days.reduce((sum, d) => sum + byDay[d], 0);
+    const maxHours = Math.max(...days.map(d => byDay[d]));
+    document.getElementById("whTotal").textContent = fmtHoursMinutes(totalHours);
+    document.getElementById("whDays").textContent = String(days.length);
+    document.getElementById("whAvg").textContent = fmtHoursMinutes(totalHours / days.length);
+    document.getElementById("whMax").textContent = fmtHoursMinutes(maxHours);
+
+    const scale = maxHours > 0 ? maxHours : 1;
+    chartWrap.innerHTML = '<div class="wh-chart">' + days.map(d => {
+      const h = byDay[d];
+      const dayNum = Number(d.split("-")[2]);
+      const barHeight = Math.max(3, Math.round((h / scale) * 140));
+      return '<div class="wh-col"><div class="wh-val">' + h.toFixed(1) + 'h</div><div class="wh-bar" style="height:' + barHeight + 'px;"></div><div class="wh-day">' + dayNum + '</div></div>';
+    }).join("") + '</div>';
+  } catch (err) {
+    console.error(err);
+    chartWrap.innerHTML = '<div class="empty-state" style="padding:16px 0;color:var(--red);font-size:13px;text-align:center;">Unable to load working hours. Please try again.</div>';
+  }
+}
+
+/* ============ UNIVERSAL VEHICLE INFO ("+" tab, full page) ============ */
 let uvHtml5Qr = null, uvScanLocked = false;
 
 function uvOpenModal() {
