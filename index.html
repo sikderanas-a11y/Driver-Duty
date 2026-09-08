@@ -151,51 +151,6 @@
           <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password">
         </div>
         <button class="btn btn-primary" id="loginBtn" onclick="handleDriverLogin()">Log In</button>
-        <div class="manual-toggle" onclick="openForgotPassword()">Forgot Password?</div>
-      </div>
-    </div>
-
-    <!-- ================= FORGOT PASSWORD: REQUEST CODE ================= -->
-    <div id="forgotScreen" class="hidden">
-      <div class="center-logo">
-        <div class="icon">🔑</div>
-        <h2>Reset Password</h2>
-        <p>Enter your email address to receive a verification code</p>
-      </div>
-      <div class="card">
-        <div id="forgotMsg"></div>
-        <div class="field">
-          <label>Email Address</label>
-          <input type="email" id="forgotEmail" placeholder="e.g. driver@example.com" autocomplete="off">
-        </div>
-        <button class="btn btn-primary" id="forgotSendBtn" onclick="requestPasswordOtp()">Send Code</button>
-        <button class="btn btn-outline" onclick="backToLoginFromForgot()">Back to Log In</button>
-      </div>
-    </div>
-
-    <!-- ================= FORGOT PASSWORD: VERIFY CODE + NEW PASSWORD ================= -->
-    <div id="resetOtpScreen" class="hidden">
-      <div class="center-logo">
-        <div class="icon">🔑</div>
-        <h2>Enter Code &amp; New Password</h2>
-        <p>Check your email for the verification code</p>
-      </div>
-      <div class="card">
-        <div id="resetOtpMsg"></div>
-        <div class="field">
-          <label>Verification Code</label>
-          <input type="text" id="resetOtpCode" placeholder="6-digit code" autocomplete="one-time-code" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label>New Password</label>
-          <input type="password" id="resetNewPassword" placeholder="At least 4 characters" autocomplete="new-password">
-        </div>
-        <div class="field">
-          <label>Confirm New Password</label>
-          <input type="password" id="resetConfirmPassword" placeholder="Re-enter new password" autocomplete="new-password">
-        </div>
-        <button class="btn btn-primary" id="resetOtpBtn" onclick="verifyOtpAndResetPassword()">Reset Password</button>
-        <button class="btn btn-outline" onclick="backToLoginFromForgot()">Cancel</button>
       </div>
     </div>
 
@@ -208,17 +163,6 @@
           <div style="color:var(--muted);font-size:13px;" id="acctId">-</div>
           <div style="color:var(--muted);font-size:13px;" id="acctMobile">-</div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="section-title">Email Address</div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Add an email so you can reset your password if you forget it. We'll send a confirmation link to verify it.</p>
-        <div id="acctEmailMsg"></div>
-        <div class="field">
-          <label>Email Address</label>
-          <input type="email" id="acctEmail" placeholder="e.g. driver@example.com" autocomplete="off">
-        </div>
-        <button class="btn btn-outline" id="acctEmailBtn" onclick="handleSaveEmail()">Save Email</button>
       </div>
 
       <div class="card">
@@ -347,6 +291,19 @@
             <option value="Fuel Issue">Fuel Issue</option>
             <option value="Overheating">Overheating</option>
             <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <select id="reportLocationSelect"><option value="">Loading locations...</option></select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="reportStatusSelect">
+            <option value="">Select Status</option>
+            <option value="Breakdown">Breakdown</option>
+            <option value="Running">Running</option>
+            <option value="Work in Progress">Work in Progress</option>
           </select>
         </div>
         <div class="field">
@@ -526,7 +483,7 @@ async function restoreDriverFromId(driverId) {
   try {
     const { data, error } = await sb
       .from("driver_information")
-      .select("name, driver_id, driver_mobile_number, email")
+      .select("name, driver_id, driver_mobile_number")
       .eq("driver_id", driverId)
       .maybeSingle();
     if (error) throw error;
@@ -535,7 +492,7 @@ async function restoreDriverFromId(driverId) {
       showScreen("auth");
       return;
     }
-    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number };
     showScreen("dashboard");
     loadDashboard();
   } catch (err) {
@@ -560,10 +517,10 @@ const TAB_SCREENS = { dashboard: "navHomeBtn", report: "navReportBtn", vehicleIn
 // Screens that belong to the logged-in app (as opposed to auth/login flows).
 // The bottom nav should stay visible on all of these, even ones that aren't
 // a dedicated tab (e.g. the Duty Start / Duty End flow launched from Home).
-const APP_SCREENS = ["dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
+const APP_SCREENS = ["dashboard", "account", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
 
 function showScreen(name) {
-  const screens = ["auth", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
+  const screens = ["auth", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
   screens.forEach(s => {
     const el = document.getElementById(s + "Screen");
     if (el) el.classList.toggle("hidden", s !== name);
@@ -621,17 +578,22 @@ async function handleDriverLogin() {
   btn.textContent = "Logging in...";
 
   try {
-    // verify_driver_login is a SECURITY DEFINER Postgres function: it looks the
-    // driver up by ID or mobile number, checks the password against the bcrypt
-    // hash stored on driver_information, and returns the driver row on success
-    // (or nothing on failure). The plaintext password never leaves this call,
-    // and the hash never comes back to the client. See setup notes for the SQL.
+    // Direct lookup: match the entered value against either driver_id or
+    // driver_mobile_number, then compare the entered password to the plain
+    // "paa" column on that same row. No hashing/encryption — paa is entered
+    // manually and compared as-is, per the simple-auth requirement.
+    // Using .limit(1) + array result (instead of .maybeSingle()) avoids an
+    // error being thrown if the identifier were ever to match more than one
+    // row — we just take the first match instead of failing the whole login.
     const identifier = looksLikePhone(val) ? normalizePhone(val) : val;
     const { data, error } = await sb
-      .rpc("verify_driver_login", { p_identifier: identifier, p_password: password })
-      .maybeSingle();
+      .from("driver_information")
+      .select("name, driver_id, driver_mobile_number, paa")
+      .or(`driver_id.eq.${identifier},driver_mobile_number.eq.${identifier}`)
+      .limit(1);
     if (error) throw error;
-    if (!data) {
+    const row = data && data[0];
+    if (!row || row.paa !== password) {
       showError(msgBox, "Incorrect Driver ID/Mobile Number or password.");
       btn.disabled = false; btn.textContent = "Log In";
       return;
@@ -641,13 +603,19 @@ async function handleDriverLogin() {
     document.getElementById("loginPassword").value = "";
     btn.disabled = false; btn.textContent = "Log In";
 
-    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
+    currentDriver = { driver_id: row.driver_id, name: row.name, mobile: row.driver_mobile_number };
     localStorage.setItem(SESSION_KEY, currentDriver.driver_id);
     showScreen("dashboard");
     loadDashboard();
   } catch (err) {
     console.error(err);
-    showError(msgBox, "Network error. Please try again.");
+    // Only show "Network error" for an actual connectivity failure (fetch
+    // throws a plain TypeError when it can't reach the network at all).
+    // Any other failure (bad query, permission/RLS error, etc.) shows its
+    // real message so it isn't mistaken for a connectivity problem.
+    const isNetworkFailure = err instanceof TypeError;
+    const detail = err && err.message ? err.message : "Please try again.";
+    showError(msgBox, isNetworkFailure ? "Network error. Please try again." : ("Login failed: " + detail));
     btn.disabled = false; btn.textContent = "Log In";
   }
 }
@@ -665,101 +633,6 @@ function looksLikePhone(input) {
   return /^\+?\d[\d\s-]{6,}$/.test((input || "").trim());
 }
 
-/* ============ FORGOT PASSWORD ============ */
-let forgotEmail = null;
-
-function openForgotPassword() {
-  document.getElementById("forgotMsg").innerHTML = "";
-  document.getElementById("forgotEmail").value = "";
-  showScreen("forgot");
-}
-
-function backToLoginFromForgot() {
-  forgotEmail = null;
-  showScreen("auth");
-}
-
-async function requestPasswordOtp() {
-  const email = document.getElementById("forgotEmail").value.trim();
-  const msgBox = "forgotMsg";
-  document.getElementById(msgBox).innerHTML = "";
-  if (!email) { showError(msgBox, "Please enter your email address."); return; }
-
-  const btn = document.getElementById("forgotSendBtn");
-  btn.disabled = true; btn.textContent = "Sending...";
-
-  try {
-    // send-password-reset-code is a Supabase Edge Function: it looks up the
-    // driver by email, generates a short-lived code, stores it (hashed) with
-    // an expiry on driver_information via a SECURITY DEFINER RPC, and emails
-    // it to the driver. It returns { success: false } (no code sent) rather
-    // than an error when the email isn't on file, so we don't leak which
-    // emails exist.
-    const { data, error } = await sb.functions.invoke("send-password-reset-code", { body: { email } });
-    if (error) throw error;
-    if (!data || !data.success) {
-      showError(msgBox, (data && data.message) || "No driver account found with that email. Add and confirm an email under Account first.");
-      btn.disabled = false; btn.textContent = "Send Code";
-      return;
-    }
-    forgotEmail = email;
-    btn.disabled = false; btn.textContent = "Send Code";
-    document.getElementById("resetOtpMsg").innerHTML = "";
-    document.getElementById("resetOtpCode").value = "";
-    document.getElementById("resetNewPassword").value = "";
-    document.getElementById("resetConfirmPassword").value = "";
-    showScreen("resetOtp");
-  } catch (err) {
-    console.error(err);
-    showError(msgBox, "Network error. Please try again.");
-    btn.disabled = false; btn.textContent = "Send Code";
-  }
-}
-
-async function verifyOtpAndResetPassword() {
-  const code = document.getElementById("resetOtpCode").value.trim();
-  const newPw = document.getElementById("resetNewPassword").value;
-  const confirmPw = document.getElementById("resetConfirmPassword").value;
-  const msgBox = "resetOtpMsg";
-  document.getElementById(msgBox).innerHTML = "";
-
-  if (!forgotEmail) { showError(msgBox, "Session expired — please request a new code."); return; }
-  if (!code) { showError(msgBox, "Please enter the verification code."); return; }
-  if (newPw.length < 4) { showError(msgBox, "New password must be at least 4 characters."); return; }
-  if (newPw !== confirmPw) { showError(msgBox, "New password and confirmation do not match."); return; }
-
-  const btn = document.getElementById("resetOtpBtn");
-  btn.disabled = true; btn.textContent = "Resetting...";
-
-  try {
-    // reset_driver_password_with_code is a SECURITY DEFINER RPC: it checks the
-    // code (and expiry) stored for this email against what was generated by
-    // send-password-reset-code, and if it matches, hashes and saves newPw as
-    // the driver's password. Returns the driver row on success, nothing on
-    // an invalid/expired code.
-    const { data, error } = await sb
-      .rpc("reset_driver_password_with_code", { p_email: forgotEmail, p_code: code, p_new_password: newPw })
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) {
-      showError(msgBox, "Invalid or expired code. Please try again.");
-      btn.disabled = false; btn.textContent = "Reset Password";
-      return;
-    }
-
-    btn.disabled = false; btn.textContent = "Reset Password";
-    forgotEmail = null;
-    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
-    localStorage.setItem(SESSION_KEY, currentDriver.driver_id);
-    showScreen("dashboard");
-    loadDashboard();
-  } catch (err) {
-    console.error(err);
-    showError(msgBox, "Network error. Please try again.");
-    btn.disabled = false; btn.textContent = "Reset Password";
-  }
-}
-
 /* ============ ACCOUNT / CHANGE PASSWORD ============ */
 function openAccount() {
   if (!currentDriver) return;
@@ -767,8 +640,6 @@ function openAccount() {
   document.getElementById("acctName").textContent = currentDriver.name;
   document.getElementById("acctId").textContent = "ID: " + currentDriver.driver_id;
   document.getElementById("acctMobile").textContent = currentDriver.mobile;
-  document.getElementById("acctEmailMsg").innerHTML = "";
-  document.getElementById("acctEmail").value = currentDriver.email || "";
   document.getElementById("changePwMsg").innerHTML = "";
   document.getElementById("cpCurrent").value = "";
   document.getElementById("cpNew").value = "";
@@ -778,36 +649,6 @@ function openAccount() {
 
 function backToDashboardFromAccount() {
   showScreen("dashboard");
-}
-
-async function handleSaveEmail() {
-  const email = document.getElementById("acctEmail").value.trim();
-  const msgBox = "acctEmailMsg";
-  document.getElementById(msgBox).innerHTML = "";
-  if (!email) { showError(msgBox, "Please enter an email address."); return; }
-
-  const btn = document.getElementById("acctEmailBtn");
-  btn.disabled = true; btn.textContent = "Saving...";
-
-  try {
-    const { error: dbErr } = await sb
-      .from("driver_information")
-      .update({ email })
-      .eq("driver_id", currentDriver.driver_id);
-    if (dbErr) {
-      showError(msgBox, "Could not save email: " + (dbErr.message || "please try again."));
-      btn.disabled = false; btn.textContent = "Save Email";
-      return;
-    }
-
-    currentDriver.email = email;
-    showSuccessMsg(msgBox, "Email saved. You can use it for password reset.");
-    btn.disabled = false; btn.textContent = "Save Email";
-  } catch (err) {
-    console.error(err);
-    showError(msgBox, "Network error. Please try again.");
-    btn.disabled = false; btn.textContent = "Save Email";
-  }
 }
 
 async function handleChangePassword() {
@@ -826,18 +667,26 @@ async function handleChangePassword() {
   btn.disabled = true; btn.textContent = "Changing...";
 
   try {
-    // Confirm the current password is correct before changing it.
-    const { data: verifyData, error: verifyErr } = await sb
-      .rpc("verify_driver_login", { p_identifier: currentDriver.driver_id, p_password: currentPw })
-      .maybeSingle();
-    if (verifyErr) throw verifyErr;
-    if (!verifyData) {
+    // Direct comparison against the plain "paa" column, same approach as
+    // login — no hashing/encryption. Re-check the current password against
+    // the DB (not just the value we cached at login) before allowing the change.
+    const { data, error } = await sb
+      .from("driver_information")
+      .select("paa")
+      .eq("driver_id", currentDriver.driver_id)
+      .limit(1);
+    if (error) throw error;
+    const row = data && data[0];
+    if (!row || row.paa !== currentPw) {
       showError(msgBox, "Current password is incorrect.");
       btn.disabled = false; btn.textContent = "Change Password";
       return;
     }
 
-    const { error: updateErr } = await sb.rpc("set_driver_password", { p_driver_id: currentDriver.driver_id, p_password: newPw });
+    const { error: updateErr } = await sb
+      .from("driver_information")
+      .update({ paa: newPw })
+      .eq("driver_id", currentDriver.driver_id);
     if (updateErr) {
       showError(msgBox, "Could not change password: " + (updateErr.message || ""));
       btn.disabled = false; btn.textContent = "Change Password";
@@ -851,7 +700,9 @@ async function handleChangePassword() {
     btn.disabled = false; btn.textContent = "Change Password";
   } catch (err) {
     console.error(err);
-    showError(msgBox, "Network error. Please try again.");
+    const isNetworkFailure = err instanceof TypeError;
+    const detail = err && err.message ? err.message : "Please try again.";
+    showError(msgBox, isNetworkFailure ? "Network error. Please try again." : ("Could not change password: " + detail));
     btn.disabled = false; btn.textContent = "Change Password";
   }
 }
@@ -1235,7 +1086,34 @@ async function loadReportTab() {
   select.innerHTML = '<option value="">Select Vehicle</option>' +
     reportVehicleCache.map(v => '<option value="' + escapeHtml(v.code) + '">' + escapeHtml(v.vehicle_name) + ' (' + escapeHtml(v.code) + ')</option>').join("");
 
+  loadReportLocationOptions();
+  document.getElementById("reportStatusSelect").value = "";
+
   loadMyReports();
+}
+
+async function loadReportLocationOptions() {
+  const sel = document.getElementById("reportLocationSelect");
+  if (locationListCache) {
+    sel.innerHTML = locationListCache.length === 0
+      ? '<option value="">No locations configured</option>'
+      : '<option value="">-- Select location --</option>' +
+        locationListCache.map(l => '<option value="' + escapeHtml(l.name) + '">' + escapeHtml(l.name) + '</option>').join("");
+    return;
+  }
+  sel.innerHTML = '<option value="">Loading locations...</option>';
+  try {
+    const { data, error } = await sb.from("location").select("name").order("name");
+    if (error) throw error;
+    locationListCache = data || [];
+    sel.innerHTML = locationListCache.length === 0
+      ? '<option value="">No locations configured</option>'
+      : '<option value="">-- Select location --</option>' +
+        locationListCache.map(l => '<option value="' + escapeHtml(l.name) + '">' + escapeHtml(l.name) + '</option>').join("");
+  } catch (err) {
+    console.error(err);
+    sel.innerHTML = '<option value="">Error loading locations</option>';
+  }
 }
 
 async function loadMyReports() {
@@ -1275,10 +1153,14 @@ async function submitBreakdownReport() {
   const code = document.getElementById("reportVehicleSelect").value;
   const vehicleName = code ? (document.getElementById("reportVehicleSelect").selectedOptions[0].textContent) : "";
   const problem = document.getElementById("reportProblemSelect").value;
+  const location = document.getElementById("reportLocationSelect").value;
+  const status = document.getElementById("reportStatusSelect").value;
   const description = document.getElementById("reportDescription").value.trim();
 
   if (!code) { showError(msgBox, "Please select a vehicle."); return; }
   if (!problem) { showError(msgBox, "Please select a problem."); return; }
+  if (!location) { showError(msgBox, "Please select a location."); return; }
+  if (!status) { showError(msgBox, "Please select a status."); return; }
 
   reportSubmitting = true;
   const btn = document.getElementById("reportSubmitBtn");
@@ -1289,23 +1171,20 @@ async function submitBreakdownReport() {
     if (vErr) throw vErr;
     if (!vehicle) { showError(msgBox, "Vehicle could not be verified. Please try again."); reportSubmitting = false; btn.disabled = false; btn.textContent = "Submit Report"; return; }
 
-    // Atomic status RPC (same one used elsewhere): flips the vehicle to
-    // "Breakdown" unless a mechanic already has it as "Work in Progress".
-    const { error: rpcErr } = await sb.rpc("report_breakdown", { p_code: vehicle.code, p_vehicle_name: vehicle.vehicle_name });
-    if (rpcErr) throw rpcErr;
+    // Only run the atomic "flip to Breakdown" RPC when the driver actually
+    // selected Breakdown as the status — Running / Work in Progress are
+    // saved directly via the upsert below instead.
+    if (status === "Breakdown") {
+      const { error: rpcErr } = await sb.rpc("report_breakdown", { p_code: vehicle.code, p_vehicle_name: vehicle.vehicle_name });
+      if (rpcErr) throw rpcErr;
+    }
 
-    // Location for the Report Page comes from the vehicle's current duty
-    // record (the Operating Location chosen at Duty Start) — the existing
-    // source of truth for where a vehicle is. Fall back to whatever
-    // latest_data already has on file if there's no open duty.
-    const location = await getCurrentVehicleLocation(vehicle.code);
-
-    // Save Location + Status (+ Problem/Description) onto latest_data so the
-    // Report Page has everything it needs in one place.
+    // Save the driver-selected Location + Status (+ Problem/Description)
+    // onto latest_data so the Report Page has everything it needs in one place.
     const { error: latestErr } = await sb.from("latest_data").upsert({
       code: vehicle.code,
       vehicle_name: vehicle.vehicle_name,
-      status: "Breakdown",
+      status,
       location,
       problem,
       description
@@ -1326,6 +1205,8 @@ async function submitBreakdownReport() {
     showSuccessMsg(msgBox, "Report submitted successfully.");
     document.getElementById("reportVehicleSelect").value = "";
     document.getElementById("reportProblemSelect").value = "";
+    document.getElementById("reportLocationSelect").value = "";
+    document.getElementById("reportStatusSelect").value = "";
     document.getElementById("reportDescription").value = "";
     loadMyReports();
   } catch (err) {
