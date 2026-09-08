@@ -152,45 +152,6 @@
         </div>
         <button class="btn btn-primary" id="loginBtn" onclick="handleDriverLogin()">Log In</button>
         <div class="manual-toggle" onclick="openForgotPassword()">Forgot Password?</div>
-        <div style="display:flex;align-items:center;gap:10px;margin:16px 0 4px;">
-          <div style="flex:1;height:1px;background:var(--border);"></div>
-          <span style="font-size:12px;color:var(--muted);">or</span>
-          <div style="flex:1;height:1px;background:var(--border);"></div>
-        </div>
-        <button class="btn btn-outline" id="googleSignupBtn" onclick="signUpWithGoogle()" style="display:flex;align-items:center;justify-content:center;gap:8px;">🔵 Sign up with Google</button>
-      </div>
-    </div>
-
-    <!-- ================= GOOGLE REGISTRATION / PROFILE SETUP ================= -->
-    <div id="googleRegisterScreen" class="hidden">
-      <div class="center-logo">
-        <div class="icon">🚚</div>
-        <h2>Complete Your Driver Profile</h2>
-        <p>Enter your ID Number first — we'll check if you already have a profile</p>
-      </div>
-      <div class="card">
-        <div id="googleRegMsg"></div>
-        <div class="field">
-          <label>ID Number</label>
-          <input type="text" id="regDriverId" placeholder="e.g. D-001" autocomplete="off" onblur="checkDriverIdAndAutofill()">
-        </div>
-        <div class="field">
-          <label>Full Name</label>
-          <input type="text" id="regName" placeholder="e.g. Rahim Ahmed" autocomplete="off">
-        </div>
-        <div class="field">
-          <label>Phone Number</label>
-          <input type="text" id="regPhone" placeholder="e.g. 017XXXXXXXX" autocomplete="off">
-        </div>
-        <div class="field">
-          <label>Email Address</label>
-          <input type="email" id="regEmail" disabled style="opacity:.7;">
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="regPassword" placeholder="At least 4 characters" autocomplete="new-password">
-        </div>
-        <button class="btn btn-primary" id="regSaveBtn" onclick="handleGoogleRegistrationSave()">Save &amp; Continue</button>
       </div>
     </div>
 
@@ -541,205 +502,56 @@ let html5QrStart = null, html5QrEnd = null, html5QrBreakdown = null;
 let scanLockedStart = false, scanLockedEnd = false, scanLockedBreakdown = false;
 let locationListCache = null;
 
-/* ============ INIT — Supabase Auth session bootstrap ============ */
+/* ============ INIT — local session bootstrap (no Supabase Auth) ============ */
 document.addEventListener("DOMContentLoaded", () => {
   initSession();
 });
 
+// Session model: after a successful password check we just remember the
+// driver_id in localStorage and re-fetch the driver row on load. There is no
+// server-side session/token — the backing table's RLS policies are what
+// actually gate access to duty data, not this client-side flag.
+const SESSION_KEY = "driverDutySessionId";
+
 async function initSession() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session && session.user) {
-    await restoreDriverFromSession(session.user.id);
+  const savedId = localStorage.getItem(SESSION_KEY);
+  if (savedId) {
+    await restoreDriverFromId(savedId);
   } else {
     showScreen("auth");
   }
 }
 
-// Keep the UI in sync with the Supabase Auth session (covers refresh, multi-tab,
-// token refresh, and expiry/invalidation — NOT a custom auto-logout).
-sb.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_OUT") {
-    currentDriver = null;
-    activeDuty = null;
-    stopScannerFor("start");
-    stopScannerFor("end");
-    showScreen("auth");
-  } else if (event === "PASSWORD_RECOVERY") {
-    // Handled inline by verifyOtpAndResetPassword(); nothing extra to do here.
-  }
-});
-
-async function restoreDriverFromSession(authUserId) {
+async function restoreDriverFromId(driverId) {
   try {
     const { data, error } = await sb
       .from("driver_information")
-      .select("name, driver_id, driver_mobile_number, email, auth_user_id")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) {
-      // Authenticated (e.g. just came back from Google OAuth) but no linked driver
-      // profile yet — send them to complete registration instead of signing out.
-      await openGoogleRegistration();
-      return;
-    }
-    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email, auth_user_id: data.auth_user_id };
-    showScreen("dashboard");
-    loadDashboard();
-  } catch (err) {
-    console.error(err);
-    showScreen("auth");
-  }
-}
-
-/* ============ GOOGLE SIGN-UP / REGISTRATION ============ */
-let regExistingRow = null; // driver_information row found by ID Number, if any (null = new driver)
-
-async function signUpWithGoogle() {
-  try {
-    await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
-    // Browser redirects to Google now; execution resumes on redirect back via initSession().
-  } catch (err) {
-    console.error(err);
-    showError("loginMsg", "Could not start Google sign-in. Please try again.");
-  }
-}
-
-async function openGoogleRegistration() {
-  const { data: { user } } = await sb.auth.getUser();
-  document.getElementById("googleRegMsg").innerHTML = "";
-  document.getElementById("regDriverId").value = "";
-  document.getElementById("regName").value = "";
-  document.getElementById("regPhone").value = user && user.phone ? user.phone : "";
-  document.getElementById("regEmail").value = (user && user.email) || "";
-  document.getElementById("regPassword").value = "";
-  regExistingRow = null;
-  showScreen("googleRegister");
-}
-
-async function checkDriverIdAndAutofill() {
-  const driverId = document.getElementById("regDriverId").value.trim();
-  const msgBox = "googleRegMsg";
-  document.getElementById(msgBox).innerHTML = "";
-  regExistingRow = null;
-  if (!driverId) return;
-
-  try {
-    const { data: { user } } = await sb.auth.getUser();
-    const { data, error } = await sb
-      .from("driver_information")
-      .select("name, driver_id, driver_mobile_number, auth_user_id")
+      .select("name, driver_id, driver_mobile_number, email")
       .eq("driver_id", driverId)
       .maybeSingle();
     if (error) throw error;
-
-    if (data) {
-      if (data.auth_user_id && user && data.auth_user_id !== user.id) {
-        showError(msgBox, "This ID Number is already linked to a different account. Please contact your administrator if this is a mistake.");
-        return;
-      }
-      // Existing driver record found — autofill, but let the user review/edit.
-      regExistingRow = data;
-      document.getElementById("regName").value = data.name || "";
-      document.getElementById("regPhone").value = data.driver_mobile_number || "";
-      showSuccessMsg(msgBox, "Found your existing profile — review the details below.");
-    }
-  } catch (err) {
-    console.error(err);
-    showError(msgBox, "Could not check ID Number. Please try again.");
-  }
-}
-
-async function handleGoogleRegistrationSave() {
-  const driverId = document.getElementById("regDriverId").value.trim();
-  const name = document.getElementById("regName").value.trim();
-  const phone = document.getElementById("regPhone").value.trim();
-  const email = document.getElementById("regEmail").value.trim();
-  const password = document.getElementById("regPassword").value;
-  const msgBox = "googleRegMsg";
-  document.getElementById(msgBox).innerHTML = "";
-
-  if (!driverId) { showError(msgBox, "ID Number is required."); return; }
-  if (!name) { showError(msgBox, "Full Name is required."); return; }
-  if (!phone) { showError(msgBox, "Phone Number is required."); return; }
-  if (password.length < 4) { showError(msgBox, "Password must be at least 4 characters."); return; }
-
-  const btn = document.getElementById("regSaveBtn");
-  btn.disabled = true; btn.textContent = "Saving...";
-
-  try {
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) { showError(msgBox, "Your Google session expired — please sign in again."); btn.disabled = false; btn.textContent = "Save & Continue"; return; }
-
-    if (regExistingRow && regExistingRow.auth_user_id && regExistingRow.auth_user_id !== user.id) {
-      showError(msgBox, "This ID Number is already linked to a different account.");
-      btn.disabled = false; btn.textContent = "Save & Continue";
+    if (!data) {
+      localStorage.removeItem(SESSION_KEY);
+      showScreen("auth");
       return;
     }
-
-    if (regExistingRow) {
-      // ID Number already exists — update/link that record, never create a duplicate.
-      const { error: updErr } = await sb
-        .from("driver_information")
-        .update({ name, driver_mobile_number: phone, email: email || null, auth_user_id: user.id })
-        .eq("driver_id", driverId);
-      if (updErr) throw updErr;
-    } else {
-      const { error: insErr } = await sb
-        .from("driver_information")
-        .insert({ name, driver_id: driverId, driver_mobile_number: phone, email: email || null, auth_user_id: user.id });
-      if (insErr) throw insErr;
-    }
-
-    // Set a password on this account so the driver can also log in later with
-    // Driver ID/Mobile + Password. Supabase Auth is the source of truth for
-    // login; we also save a hashed backup copy on driver_information in case
-    // Supabase Auth is ever unavailable (see set_driver_password_backup RPC —
-    // it stores a bcrypt hash only, never the plaintext password).
-    const { error: pwErr } = await sb.auth.updateUser({ password });
-    if (pwErr) console.warn("Password not set:", pwErr.message);
-    else {
-      const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: driverId, p_password: password });
-      if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
-    }
-
-    currentDriver = { driver_id: driverId, name, mobile: phone, email: email || null, auth_user_id: user.id };
-    btn.disabled = false; btn.textContent = "Save & Continue";
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
     showScreen("dashboard");
     loadDashboard();
   } catch (err) {
     console.error(err);
-    showError(msgBox, "Could not save your profile: " + (err.message || "please try again."));
-    btn.disabled = false; btn.textContent = "Save & Continue";
+    showScreen("auth");
   }
 }
 
 /* ============ PHONE HELPERS ============ */
-// Normalizes a Bangladeshi mobile number to E.164 (+8801XXXXXXXXX) for use as the
-// Supabase Auth phone identity. Adjust if your driver base uses a different country.
+// Normalizes a Bangladeshi mobile number to E.164 (+8801XXXXXXXXX).
 function normalizePhone(input) {
   let v = (input || "").trim().replace(/[\s-]/g, "");
   if (v.startsWith("+")) return v;
   if (v.startsWith("880")) return "+" + v;
   if (v.startsWith("0")) return "+880" + v.slice(1);
   return v;
-}
-function looksLikePhone(input) {
-  return /^\+?\d[\d\s-]{6,}$/.test((input || "").trim());
-}
-
-// Resolves whatever the driver typed (Driver ID or Mobile Number) into the E.164
-// phone used as their Supabase Auth identity, via a lookup on driver_information.
-async function resolveLoginPhone(identifier) {
-  if (looksLikePhone(identifier)) return normalizePhone(identifier);
-  const { data, error } = await sb
-    .from("driver_information")
-    .select("driver_mobile_number")
-    .eq("driver_id", identifier)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return normalizePhone(data.driver_mobile_number);
 }
 
 /* ============ SCREEN MANAGEMENT ============ */
@@ -751,7 +563,7 @@ const TAB_SCREENS = { dashboard: "navHomeBtn", report: "navReportBtn", vehicleIn
 const APP_SCREENS = ["dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
 
 function showScreen(name) {
-  const screens = ["auth", "googleRegister", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
+  const screens = ["auth", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
   screens.forEach(s => {
     const el = document.getElementById(s + "Screen");
     if (el) el.classList.toggle("hidden", s !== name);
@@ -809,15 +621,17 @@ async function handleDriverLogin() {
   btn.textContent = "Logging in...";
 
   try {
-    const phone = await resolveLoginPhone(val);
-    if (!phone) {
-      showError(msgBox, "No driver found with that Driver ID / Mobile Number.");
-      btn.disabled = false; btn.textContent = "Log In";
-      return;
-    }
-
-    const { data, error } = await sb.auth.signInWithPassword({ phone, password });
-    if (error) {
+    // verify_driver_login is a SECURITY DEFINER Postgres function: it looks the
+    // driver up by ID or mobile number, checks the password against the bcrypt
+    // hash stored on driver_information, and returns the driver row on success
+    // (or nothing on failure). The plaintext password never leaves this call,
+    // and the hash never comes back to the client. See setup notes for the SQL.
+    const identifier = looksLikePhone(val) ? normalizePhone(val) : val;
+    const { data, error } = await sb
+      .rpc("verify_driver_login", { p_identifier: identifier, p_password: password })
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
       showError(msgBox, "Incorrect Driver ID/Mobile Number or password.");
       btn.disabled = false; btn.textContent = "Log In";
       return;
@@ -827,7 +641,10 @@ async function handleDriverLogin() {
     document.getElementById("loginPassword").value = "";
     btn.disabled = false; btn.textContent = "Log In";
 
-    await restoreDriverFromSession(data.user.id);
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
+    localStorage.setItem(SESSION_KEY, currentDriver.driver_id);
+    showScreen("dashboard");
+    loadDashboard();
   } catch (err) {
     console.error(err);
     showError(msgBox, "Network error. Please try again.");
@@ -836,7 +653,16 @@ async function handleDriverLogin() {
 }
 
 function logout() {
-  sb.auth.signOut(); // onAuthStateChange(SIGNED_OUT) clears state and shows the login screen
+  localStorage.removeItem(SESSION_KEY);
+  currentDriver = null;
+  activeDuty = null;
+  stopScannerFor("start");
+  stopScannerFor("end");
+  showScreen("auth");
+}
+
+function looksLikePhone(input) {
+  return /^\+?\d[\d\s-]{6,}$/.test((input || "").trim());
 }
 
 /* ============ FORGOT PASSWORD ============ */
@@ -863,23 +689,16 @@ async function requestPasswordOtp() {
   btn.disabled = true; btn.textContent = "Sending...";
 
   try {
-    // Give a clearer error up front if this email isn't on file / confirmed
-    // for any driver, instead of a generic Supabase failure later.
-    const { data: driverRow, error: lookupErr } = await sb
-      .from("driver_information")
-      .select("driver_id")
-      .ilike("email", email)
-      .maybeSingle();
-    if (lookupErr) throw lookupErr;
-    if (!driverRow) {
-      showError(msgBox, "No driver account found with that email. Add and confirm an email under Account first.");
-      btn.disabled = false; btn.textContent = "Send Code";
-      return;
-    }
-
-    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-    if (error) {
-      showError(msgBox, "Could not send code: " + (error.message || "please check the email address and try again."));
+    // send-password-reset-code is a Supabase Edge Function: it looks up the
+    // driver by email, generates a short-lived code, stores it (hashed) with
+    // an expiry on driver_information via a SECURITY DEFINER RPC, and emails
+    // it to the driver. It returns { success: false } (no code sent) rather
+    // than an error when the email isn't on file, so we don't leak which
+    // emails exist.
+    const { data, error } = await sb.functions.invoke("send-password-reset-code", { body: { email } });
+    if (error) throw error;
+    if (!data || !data.success) {
+      showError(msgBox, (data && data.message) || "No driver account found with that email. Add and confirm an email under Account first.");
       btn.disabled = false; btn.textContent = "Send Code";
       return;
     }
@@ -913,32 +732,27 @@ async function verifyOtpAndResetPassword() {
   btn.disabled = true; btn.textContent = "Resetting...";
 
   try {
-    const { data, error } = await sb.auth.verifyOtp({ email: forgotEmail, token: code, type: "email" });
-    if (error) {
+    // reset_driver_password_with_code is a SECURITY DEFINER RPC: it checks the
+    // code (and expiry) stored for this email against what was generated by
+    // send-password-reset-code, and if it matches, hashes and saves newPw as
+    // the driver's password. Returns the driver row on success, nothing on
+    // an invalid/expired code.
+    const { data, error } = await sb
+      .rpc("reset_driver_password_with_code", { p_email: forgotEmail, p_code: code, p_new_password: newPw })
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
       showError(msgBox, "Invalid or expired code. Please try again.");
       btn.disabled = false; btn.textContent = "Reset Password";
       return;
     }
 
-    const { error: updateErr } = await sb.auth.updateUser({ password: newPw });
-    if (updateErr) {
-      showError(msgBox, "Could not set new password: " + (updateErr.message || ""));
-      btn.disabled = false; btn.textContent = "Reset Password";
-      return;
-    }
-
-    // Best-effort: keep the hashed backup copy in driver_information in sync.
-    try {
-      const { data: driverRow } = await sb.from("driver_information").select("driver_id").eq("auth_user_id", data.user.id).maybeSingle();
-      if (driverRow) {
-        const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: driverRow.driver_id, p_password: newPw });
-        if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
-      }
-    } catch (e) { console.warn("Backup password hash step failed:", e); }
-
     btn.disabled = false; btn.textContent = "Reset Password";
     forgotEmail = null;
-    await restoreDriverFromSession(data.user.id);
+    currentDriver = { driver_id: data.driver_id, name: data.name, mobile: data.driver_mobile_number, email: data.email };
+    localStorage.setItem(SESSION_KEY, currentDriver.driver_id);
+    showScreen("dashboard");
+    loadDashboard();
   } catch (err) {
     console.error(err);
     showError(msgBox, "Network error. Please try again.");
@@ -976,28 +790,18 @@ async function handleSaveEmail() {
   btn.disabled = true; btn.textContent = "Saving...";
 
   try {
-    // Link the email to this driver's Supabase Auth identity — Supabase will
-    // send a confirmation link to it. It only becomes usable for OTP-based
-    // password reset once the driver clicks that link.
-    const { error: authErr } = await sb.auth.updateUser({ email });
-    if (authErr) {
-      showError(msgBox, "Could not save email: " + (authErr.message || "please try again."));
-      btn.disabled = false; btn.textContent = "Save Email";
-      return;
-    }
-
     const { error: dbErr } = await sb
       .from("driver_information")
       .update({ email })
       .eq("driver_id", currentDriver.driver_id);
     if (dbErr) {
-      showError(msgBox, "Email sent for confirmation, but could not save it to your profile: " + (dbErr.message || ""));
+      showError(msgBox, "Could not save email: " + (dbErr.message || "please try again."));
       btn.disabled = false; btn.textContent = "Save Email";
       return;
     }
 
     currentDriver.email = email;
-    showSuccessMsg(msgBox, "Check " + email + " for a confirmation link. Once confirmed, you can use it for password reset.");
+    showSuccessMsg(msgBox, "Email saved. You can use it for password reset.");
     btn.disabled = false; btn.textContent = "Save Email";
   } catch (err) {
     console.error(err);
@@ -1022,25 +826,23 @@ async function handleChangePassword() {
   btn.disabled = true; btn.textContent = "Changing...";
 
   try {
-    // Re-authenticate with the current password to confirm it's correct before changing it.
-    const phone = normalizePhone(currentDriver.mobile);
-    const { error: verifyErr } = await sb.auth.signInWithPassword({ phone, password: currentPw });
-    if (verifyErr) {
+    // Confirm the current password is correct before changing it.
+    const { data: verifyData, error: verifyErr } = await sb
+      .rpc("verify_driver_login", { p_identifier: currentDriver.driver_id, p_password: currentPw })
+      .maybeSingle();
+    if (verifyErr) throw verifyErr;
+    if (!verifyData) {
       showError(msgBox, "Current password is incorrect.");
       btn.disabled = false; btn.textContent = "Change Password";
       return;
     }
 
-    const { error: updateErr } = await sb.auth.updateUser({ password: newPw });
+    const { error: updateErr } = await sb.rpc("set_driver_password", { p_driver_id: currentDriver.driver_id, p_password: newPw });
     if (updateErr) {
       showError(msgBox, "Could not change password: " + (updateErr.message || ""));
       btn.disabled = false; btn.textContent = "Change Password";
       return;
     }
-
-    // Best-effort: keep the hashed backup copy in driver_information in sync.
-    const { error: backupErr } = await sb.rpc("set_driver_password_backup", { p_driver_id: currentDriver.driver_id, p_password: newPw });
-    if (backupErr) console.warn("Backup password hash not saved:", backupErr.message);
 
     showSuccessMsg(msgBox, "Password changed successfully.");
     document.getElementById("cpCurrent").value = "";
