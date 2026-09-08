@@ -727,6 +727,11 @@ async function resolveLoginPhone(identifier) {
 /* ============ SCREEN MANAGEMENT ============ */
 const TAB_SCREENS = { dashboard: "navHomeBtn", report: "navReportBtn", vehicleInfo: "navPlusBtn", workingHours: "navDutyBtn", account: "navAccountBtn" };
 
+// Screens that belong to the logged-in app (as opposed to auth/login flows).
+// The bottom nav should stay visible on all of these, even ones that aren't
+// a dedicated tab (e.g. the Duty Start / Duty End flow launched from Home).
+const APP_SCREENS = ["dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
+
 function showScreen(name) {
   const screens = ["auth", "googleRegister", "forgot", "resetOtp", "account", "dashboard", "dutyStartScan", "dutyStartConfirm", "dutyEndScan", "success", "report", "vehicleInfo", "workingHours"];
   screens.forEach(s => {
@@ -735,9 +740,16 @@ function showScreen(name) {
   });
   const loggedIn = !!currentDriver;
   const isTab = Object.prototype.hasOwnProperty.call(TAB_SCREENS, name);
-  document.getElementById("bottomNav").classList.toggle("hidden", !loggedIn || !isTab);
+  const isAppScreen = APP_SCREENS.includes(name);
+  document.getElementById("bottomNav").classList.toggle("hidden", !loggedIn || !isAppScreen);
   Object.values(TAB_SCREENS).forEach(btnId => document.getElementById(btnId).classList.remove("active"));
-  if (isTab) document.getElementById(TAB_SCREENS[name]).classList.add("active");
+  // For non-tab screens (duty start/end flow, success), keep Home highlighted
+  // since Cancel/Done return there — the nav bar just shouldn't disappear.
+  if (isTab) {
+    document.getElementById(TAB_SCREENS[name]).classList.add("active");
+  } else if (isAppScreen) {
+    document.getElementById(TAB_SCREENS["dashboard"]).classList.add("active");
+  }
   document.getElementById("headerSub").textContent = currentDriver ? currentDriver.name : "Field Operations";
 
   if (name === "report") loadReportTab();
@@ -1280,9 +1292,16 @@ async function startScannerFor(mode) {
 }
 
 function stopScannerFor(mode) {
-  const qr = mode === "start" ? html5QrStart : html5QrEnd;
-  if (qr) {
-    qr.stop().then(() => qr.clear()).catch(() => {});
+  try {
+    const qr = mode === "start" ? html5QrStart : html5QrEnd;
+    if (qr) {
+      qr.stop().then(() => qr.clear()).catch(() => {});
+    }
+  } catch (err) {
+    // A scanner that was never started (e.g. "No camera found") can throw
+    // synchronously here. Never let that block navigation back to the
+    // dashboard — just log it and continue.
+    console.warn("stopScannerFor(" + mode + ") failed:", err);
   }
 }
 
